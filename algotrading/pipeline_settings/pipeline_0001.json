@@ -1,0 +1,22 @@
+{
+    "pipeline": {
+        "filename": "pipeline_0001",
+        "description": "Basic RL model for AMD NASDAQ stock",
+        "contract_info": {
+            "symbol": "AMD",
+            "secType": "STK",
+            "exchange": "SMART",
+            "currency": "USD",
+            "primaryExchange": "NASDAQ"
+        },
+        "historical_data_config": {
+            "columns": ["date", "open", "high", "low", "close", "volume", "wap", "count"],
+            "barSizeSetting": "5 secs",
+            "whatToShow": "TRADES"
+        },
+        "live_data_config": {
+            "barSizeSetting": 5,
+            "whatToShow": "TRADES"
+        }
+    }
+}
