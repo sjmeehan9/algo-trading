@@ -1,0 +1,38 @@
+# Config settings for save_historical.py functions
+step_size:
+  1 secs:
+    barSize: 1
+    durationString: 1800 S
+    durationNum: 1800
+    increment_size: 30
+    loops_required: 12
+    date_hour_max: 16
+    date_minute_max: 0
+    date_second_max: 0
+  5 secs:
+    barSize: 5
+    durationString: 3600 S
+    durationNum: 3600
+    increment_size: 60
+    loops_required: 6
+    date_hour_max: 16
+    date_minute_max: 0
+    date_second_max: 0
+  10 secs:
+    barSize: 10
+    durationString: 14400 S
+    durationNum: 14400
+    increment_size: 240
+    loops_required: 1
+    date_hour_max: 16
+    date_minute_max: 0
+    date_second_max: 0
+  30 secs:
+    barSize: 30
+    durationString: 28800 S
+    durationNum: 28800
+    increment_size: 480
+    loops_required: 1
+    date_hour_max: 16
+    date_minute_max: 0
+    date_second_max: 0

@@ -1,0 +1,18 @@
+# Config settings for main.py script
+ip_address: 127.0.0.1
+
+port: 7497
+
+pipeline: pipeline_0001
+
+log_path: logs/
+
+data_path: data/
+
+task_selection: task1
+
+# Settings for task 1
+date_list:
+  - 2024-01-22
+  - 2024-01-23
+  - 2024-01-24
