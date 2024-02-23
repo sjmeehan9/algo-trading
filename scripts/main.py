@@ -2,7 +2,6 @@ import datetime
 import logging
 import os
 from pathlib import Path
-from threading import Timer
 
 import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,7 +21,7 @@ from algotrading import (config_loader,
 
 config_filename = 'local_config.yml'
 
-def main(filename: str) -> str:
+def main(filename: str) -> None:
 
     # Set current working directory
     main_dir = os.path.dirname(os.path.abspath(__file__))
@@ -41,18 +40,14 @@ def main(filename: str) -> str:
     # Setup logger
     setup_logger(config['log_path'])
     logger = logging.getLogger(__name__)    
-    logger.info("Starting application, time is %s", datetime.datetime.now())
+    logger.info('Starting application, time is %s', datetime.datetime.now())
 
     # Init task
-    app = init_task(config, task_options, pipeline)
-    
-    app.connect(config['ip_address'], config['port'], 0)
+    init_task(config, task_options, pipeline)
 
-    Timer(app.timer, app.stop).start()
+    logger.info('Algotrading session for this task has ended')
 
-    app.run()
-
-    return print('algotrading session for this task has ended')
+    return None
     
 
 if __name__ == "__main__":
