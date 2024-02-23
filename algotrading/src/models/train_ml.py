@@ -1,3 +1,3 @@
-class StateBuilder:
+class TrainML:
     def __init__(self):
         pass

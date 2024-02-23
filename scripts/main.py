@@ -1,7 +1,6 @@
 import datetime
 import logging
 import os
-from pathlib import Path
 
 import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -9,12 +8,8 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 # TODO Remove two lines above once algotrading is a package
 
 from algotrading import (config_loader,
-    PastData,
-    LiveData,
     setup_logger,
-    StateBuilder,
     print_task_options,
-    pipeline_loader,
     init_task,
     init_pipeline
 )
