@@ -1,5 +1,22 @@
 from datetime import datetime
+import os
 import pytz
+
+# Function to check for an audit json file, and create one if it doesn't exist
+def check_audit_json(audit_filepath: str) -> None:
+    pass
+
+# Custom function to parse datetime string and convert to a timezone-aware datetime object
+def parse_datetime_tz(s: str) -> datetime:
+    # Split the string to separate the timezone
+    datetime_str, tz_str = s.rsplit(' ', 1)
+    # Parse the datetime part
+    dt = datetime.strptime(datetime_str, '%Y%m%d %H:%M:%S')
+    # Localize the datetime object to the specified timezone
+    tz = pytz.timezone(tz_str)
+    dt = tz.localize(dt)
+
+    return dt
 
 # Print the task options
 def print_task_options() -> list:
@@ -14,16 +31,3 @@ def print_task_options() -> list:
     ''')
 
     return task_options
-
-
-# Custom function to parse datetime string and convert to a timezone-aware datetime object
-def parse_datetime_tz(s: str) -> datetime:
-    # Split the string to separate the timezone
-    datetime_str, tz_str = s.rsplit(' ', 1)
-    # Parse the datetime part
-    dt = datetime.strptime(datetime_str, '%Y%m%d %H:%M:%S')
-    # Localize the datetime object to the specified timezone
-    tz = pytz.timezone(tz_str)
-    dt = tz.localize(dt)
-
-    return dt

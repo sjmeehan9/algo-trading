@@ -17,6 +17,33 @@
         "live_data_config": {
             "barSizeSetting": 5,
             "whatToShow": "TRADES"
+        },
+        "model": {
+            "pipeline_type": "rl",
+            "model_type": "ppo",
+            "model_config": {
+                "n_steps": 128,
+                "batch_size": 32,
+                "gamma": 0.99,
+                "gae_lambda": 0.95,
+                "clip_range": 0.2,
+                "vf_coef": 0.5,
+                "ent_coef": 0.01,
+                "max_grad_norm": 0.5,
+                "use_sde": false,
+                "sde_sample_freq": -1,
+                "target_kl": 0.01,
+                "tensorboard_log": null,
+                "create_eval_env": false,
+                "policy_kwargs": null,
+                "verbose": 0,
+                "seed": null,
+                "device": "auto",
+                "n_cpu_tf_sess": 1,
+                "n_timesteps": 1000000,
+                "n_eval_episodes": 5,
+                "eval_env": null
+            }
         }
     }
 }

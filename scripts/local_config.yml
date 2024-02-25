@@ -16,3 +16,7 @@ date_list:
   - 2024-01-22
   - 2024-01-23
   - 2024-01-24
+
+# Settings for task 2
+data_mode: historical
+save_to_file: ppo_0001
