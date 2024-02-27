@@ -1,10 +1,13 @@
 from datetime import datetime
+import json
 import os
 import pytz
 
 # Function to check for an audit json file, and create one if it doesn't exist
 def check_audit_json(audit_filepath: str) -> None:
-    pass
+    if not os.path.exists(audit_filepath):
+        with open(audit_filepath, 'w') as f:
+            json.dump({}, f)
 
 # Custom function to parse datetime string and convert to a timezone-aware datetime object
 def parse_datetime_tz(s: str) -> datetime:

@@ -36,6 +36,7 @@ def init_task(config: dict, task_options: list, pipeline: dict) -> None:
         app.run()
     elif task == 'task2':
         app = TrainML(config, pipeline)
+        app.start()
     elif task == 'task3':
         app = LiveData(pipeline)
         app.connect(config['ip_address'], config['port'], 0)
