@@ -36,7 +36,8 @@ class TrainML:
                 raise FileExistsError(f'{self.model_filename} already exists')
             
         self.audit_filepath = os.path.join(pipeline_data_path, self.AUDIT_FILENAME)
-    
+
+
     def start(self) -> None:
         #TODO
         # Write relevant training session info to audit file
@@ -45,7 +46,7 @@ class TrainML:
         pipeline_type = self.pipeline['pipeline']['model']['pipeline_type']
 
         if pipeline_type == 'rl':
-            rl_train = TrainRL()
+            rl_train = TrainRL(self.config, self.pipeline)
         else:
             pass
         

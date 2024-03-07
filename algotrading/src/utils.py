@@ -9,6 +9,7 @@ def check_audit_json(audit_filepath: str) -> None:
         with open(audit_filepath, 'w') as f:
             json.dump({}, f)
 
+
 # Custom function to parse datetime string and convert to a timezone-aware datetime object
 def parse_datetime_tz(s: str) -> datetime:
     # Split the string to separate the timezone
@@ -20,6 +21,7 @@ def parse_datetime_tz(s: str) -> datetime:
     dt = tz.localize(dt)
 
     return dt
+
 
 # Print the task options
 def print_task_options() -> list:

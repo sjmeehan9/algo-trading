@@ -18,9 +18,19 @@
             "barSizeSetting": 5,
             "whatToShow": "TRADES"
         },
+        "env_config": {
+            "env_name": "trading_env",
+            "action_space_size": 3
+        },
+        "model_data_config": {
+            "columns": ["date", "close"],
+            "file_trim": 0.1,
+            "past_events": 60
+        },
         "model": {
             "pipeline_type": "rl",
             "model_type": "ppo",
+            "model_reward": "profit_seeker",
             "model_config": {
                 "n_steps": 128,
                 "batch_size": 32,

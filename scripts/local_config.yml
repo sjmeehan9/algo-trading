@@ -21,3 +21,8 @@ date_list:
 data_mode: historical
 
 save_to_file: ppo_0001
+
+training_date_list:
+  - 2024-01-22
+  - 2024-01-23
+  - 2024-01-24
