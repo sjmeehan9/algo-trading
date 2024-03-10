@@ -6,4 +6,4 @@ from .src.load_config import config_loader, pipeline_loader
 from .src.log_setup import setup_logger
 from .src.models.train_ml import TrainML
 from .src.models.train_rl import TrainRL
-from .src.utils import print_task_options, parse_datetime_tz
+from .src.utils import write_audit_json, print_task_options, parse_datetime_tz

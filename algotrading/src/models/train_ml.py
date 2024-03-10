@@ -1,7 +1,7 @@
 import logging
 import os
 from .train_rl import TrainRL
-from ..utils import check_audit_json
+from ..utils import write_audit_json
 
 class TrainML:
     AUDIT_FILENAME = 'training_sessions.json'
@@ -37,15 +37,26 @@ class TrainML:
         self.audit_filepath = os.path.join(pipeline_data_path, self.AUDIT_FILENAME)
 
 
+    def session_info(self) -> dict:
+        session_info = {
+            'pipeline': self.pipeline_name,
+            'model': self.model_filename
+        }
+
+        return session_info
+
+
     def start(self) -> None:
-        #TODO
+        session_info = self.session_info()
+
         # Write relevant training session info to audit file
-        check_audit_json(self.audit_filepath)
+        write_audit_json(self.audit_filepath, session_info)
 
         pipeline_type = self.pipeline['pipeline']['model']['pipeline_type']
 
         if pipeline_type == 'rl':
             rl_train = TrainRL(self.config, self.pipeline)
+            rl_train.start()
         else:
             pass
         

@@ -1,17 +1,12 @@
 import logging
+from ..data_sourcing.state_builder import StateBuilder
 
 class TrainRL():
     def __init__(self, config: dict, pipeline: dict):
         self.logger = logging.getLogger(__name__)
 
-        # Instanciate StateBuilder object
-        # Pass config and pipeline to StateBuilder object
-
-        # Read data_mode from local config
-        # If data_mode is 'historical', call the state_builder read data function
-        # If data_mode is 'live', instanciate a LiveData object and setup the stream
-        # For live data, pass the data through to StateBuilder object
-        # Placeholder for sequence of steps to train a model with live data
+        self.config = config
+        self.pipeline = pipeline
 
         # Self variable for ep length from StateBuilder function
 
@@ -23,9 +18,31 @@ class TrainRL():
         # Build a factory function to instanciate the reward function
         # The reward function is selected in the pipeline config
 
+        # Build a factory function to instanciate the model type
+        # The model type is selected in the pipeline config
+
 
     def train_ppo(self):
         pass
 
+
+    def data_setup(self) -> None:
+        if self.config['data_mode'] == 'historical':
+            self.state_builder.read_data()
+            self.logger.info('placeholder')
+        elif self.config['data_mode'] == 'live':
+            # Placeholder for live data stream setup
+            # For live data, pass the data through to StateBuilder object
+            pass
+        else:
+            self.logger.error('data_mode not recognised')
+
+        return None
+
+
     def start(self):
-        pass
+        # Instanciate StateBuilder object
+        self.state_builder = StateBuilder(self.config, self.pipeline)
+
+        # Setup the data feed
+        self.data_setup()

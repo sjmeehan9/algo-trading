@@ -4,10 +4,28 @@ import os
 import pytz
 
 # Function to check for an audit json file, and create one if it doesn't exist
-def check_audit_json(audit_filepath: str) -> None:
-    if not os.path.exists(audit_filepath):
-        with open(audit_filepath, 'w') as f:
-            json.dump({}, f)
+def write_audit_json(audit_filepath: str, session_info: dict) -> None:
+    # Check if the file exists
+    if os.path.exists(audit_filepath):
+        # File exists, read its content first
+        with open(audit_filepath, 'r') as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                # File exists but is empty or contains invalid JSON, start fresh
+                data = {}
+    else:
+        # File does not exist, start with an empty dictionary
+        data = {}
+    
+    # Update the data with new session_info
+    data.setdefault('sessions', []).append(session_info)
+    
+    # Write the updated content back to the file
+    with open(audit_filepath, 'w') as f:
+        json.dump(data, f, indent=4)
+
+    return None
 
 
 # Custom function to parse datetime string and convert to a timezone-aware datetime object

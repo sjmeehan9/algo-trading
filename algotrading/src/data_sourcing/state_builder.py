@@ -1,16 +1,13 @@
 import logging
+import os
+import pandas as pd
 
 class StateBuilder:
     def __init__(self, config: dict, pipeline: dict):
         self.logger = logging.getLogger(__name__)
 
-        # Assumes we're training an RL model
-        
-        # Build function to gather and read all the required data
-        # Read to a dictionary then altogether into a dataframe
-        # Store in a self variable and do not return anything
-        # Add a data trim percentage as what start/end part of the data to drop
-        # Keep model data columns in pipeline config
+        self.config = config
+        self.pipeline = pipeline
         
         # Build function to calculate episode length using StateBuilder data
         # This has already been calculated in check dataframe function in save_historical.py
@@ -21,4 +18,58 @@ class StateBuilder:
         # Adds the custom reward variables to the state
         # Tracking of what place in the data we are is kept in StateBuilder
 
-        # Placeholder for statebuilder function to process live data
+
+    def live_data(self):
+        pass
+
+
+    def read_data(self) -> None:
+        data_path = self.config['data_path']
+        saved_data_path = os.path.join(data_path, 'saved_data/')
+        pipeline_name = self.pipeline['pipeline']['filename']
+        pipeline_data_path = os.path.join(saved_data_path, f'{pipeline_name}/')
+
+        date_list = self.config['training_date_list']
+
+        file_trim = self.pipeline['pipeline']['model_data_config']['file_trim']
+
+        contract_info = self.pipeline['pipeline']['contract_info']
+
+        self.final_dataframe = pd.DataFrame()
+
+        for date in date_list:
+            filename = '{}_{}_{}{:02d}{:02d}.csv'.format(
+                contract_info['symbol'],
+                contract_info['primaryExchange'],
+                date.year,
+                date.month,
+                date.day
+            )
+
+            file_path = os.path.join(pipeline_data_path, filename)
+
+            if not os.path.exists(file_path):
+                self.logger.info(f'Skipping: {filename} (file not found or not a CSV file)')
+                continue
+            
+            try:
+                # Read the current CSV file into a DataFrame
+                current_df = pd.read_csv(file_path)
+
+                rows_to_drop = int(len(current_df) * file_trim / 2)
+
+                current_df = current_df.iloc[rows_to_drop:-rows_to_drop]
+                
+                # Append the current DataFrame to the final DataFrame
+                self.final_dataframe = pd.concat([self.final_dataframe, current_df], ignore_index=True)
+
+            except Exception as e:
+                self.logger.info(f'Error reading {filename}: {e}')
+                continue
+
+        self.episode_length = len(current_df) - self.pipeline['pipeline']['model_data_config']['past_events']
+        
+        if self.pipeline['pipeline']['model_data_config']['columns']:
+            self.final_dataframe = self.final_dataframe[self.pipeline['pipeline']['model_data_config']['columns']]
+        
+        return None
