@@ -1,5 +1,4 @@
 import logging
-from typing import Dict, Union
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
@@ -10,7 +9,7 @@ class LiveData(EWrapper, EClient):
     BASE_SECONDS = 20
     INIT_REQUEST_ID = 1000
 
-    def __init__(self, pipeline: Dict[str, Union[str, Dict[str, str]]]):
+    def __init__(self, pipeline: dict):
         EClient.__init__(self, self)
 
         self.logger = logging.getLogger(__name__)

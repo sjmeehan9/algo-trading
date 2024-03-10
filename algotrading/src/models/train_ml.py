@@ -1,13 +1,12 @@
 import logging
 import os
-from typing import Dict, List, Union
 from .train_rl import TrainRL
 from ..utils import check_audit_json
 
 class TrainML:
     AUDIT_FILENAME = 'training_sessions.json'
 
-    def __init__(self, config: Dict[str, Union[str, List[str], Dict[str, Union[str, int]]]], pipeline: Dict[str, Union[str, Dict[str, str]]]):
+    def __init__(self, config: dict, pipeline: dict):
         self.logger = logging.getLogger(__name__)
         
         self.config = config
