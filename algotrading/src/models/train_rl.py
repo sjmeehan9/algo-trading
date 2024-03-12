@@ -8,8 +8,6 @@ class TrainRL():
         self.config = config
         self.pipeline = pipeline
 
-        # Self variable for ep length from StateBuilder function
-
         # Build a function that will create the environment
         # Use def env_factory(env_name): which will if else through the different envs
         # Uses the StateBuilder object and the ep length
@@ -38,6 +36,10 @@ class TrainRL():
             self.logger.error('data_mode not recognised')
 
         return None
+    
+
+    def env_factory(self, env_name: str):
+        pass
 
 
     def start(self):
