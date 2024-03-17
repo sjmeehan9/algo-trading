@@ -13,10 +13,9 @@ class StateBuilder:
         self.config = config
         self.pipeline = pipeline
 
-        # Build function to setup the state for step in the environment
-        # Returns the window of data for the next step
-        # Adds the custom reward variables to the state
-        # Tracking of what place in the data we are is kept in StateBuilder
+        # In order to set up obs space, we need to loop through the model columns
+        # as well as the custom reward variables and understand what are keys
+        # and what values need to be scaled
 
 
     def live_data(self):
@@ -85,6 +84,33 @@ class StateBuilder:
         self.episode_length = len(current_df) - self.pipeline['pipeline']['model_data_config']['past_events']
         
         if self.pipeline['pipeline']['model_data_config']['columns']:
-            self.final_dataframe = self.final_dataframe[self.pipeline['pipeline']['model_data_config']['columns']]
+            columns_keys = list(self.pipeline['pipeline']['model_data_config']['columns'].keys())
+            self.final_dataframe = self.final_dataframe[columns_keys]
         
         return None
+    
+
+    def initialise_state(self) -> dict:
+        # Setup counters
+        # Loop through model data config columns and save three lists 
+        # A key list, a scale list and an unscaled list
+        # If list not empty, append to a temp dataframe
+        # Scale the scale columns as needed using a scale function, via an apply function
+        # Create custom reward variables dictionary as class attribute
+        # For now the dictionary element values are descriptions, keys are the variable names
+        # Call the initial_reward_variables function to calculate the initial values
+        # Return the state dictionary
+        pass
+
+    
+    def state_step(self) -> dict:
+        # Increment the counters
+        # Using the lists from the initialise_state function, grab the next window of data
+        # If list not empty, append to a temp dataframe
+        # Scale the scale columns as needed using a scale function, via an apply function
+        # For the custom variables, grab the previous step values from the last step
+        # Drop the earliest row and add columns to dataframe
+        # Call each reward variable function to calculate the new values for the latest time
+        # Leverage calcs from the financials module
+        # Return the state dictionary
+        pass

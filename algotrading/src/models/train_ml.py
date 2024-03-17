@@ -44,6 +44,13 @@ class TrainML:
         }
 
         return session_info
+    
+
+    def training_factory(self, pipeline_type: str) -> object:
+        if pipeline_type == 'rl':
+            return TrainRL(self.config, self.pipeline)
+        else:
+            pass
 
 
     def start(self) -> None:
@@ -52,11 +59,9 @@ class TrainML:
         # Write relevant training session info to audit file
         write_audit_json(self.audit_filepath, session_info)
 
-        pipeline_type = self.pipeline['pipeline']['model']['pipeline_type']
+        # Instanciate training object
+        self.training = self.training_factory(self.pipeline['pipeline']['model']['pipeline_type'])
 
-        if pipeline_type == 'rl':
-            rl_train = TrainRL(self.config, self.pipeline)
-            rl_train.start()
-        else:
-            pass
+        # Start training
+        self.training.start()
         
