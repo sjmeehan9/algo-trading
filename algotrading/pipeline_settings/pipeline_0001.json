@@ -25,7 +25,8 @@
         "model_data_config": {
             "columns": {
                 "date": [true, false],
-                "close": [false, true]
+                "close": [false, true],
+                "volume": [false, true]
             },
             "file_trim": 0.1,
             "past_events": 60

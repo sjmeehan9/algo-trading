@@ -2,10 +2,12 @@ from datetime import datetime
 import logging
 import os
 import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
 
 class StateBuilder:
     START_DATEPART = -4
     END_DATEPART = -8
+    SCALER = MinMaxScaler()
 
     def __init__(self, config: dict, pipeline: dict):
         self.logger = logging.getLogger(__name__)
@@ -13,9 +15,7 @@ class StateBuilder:
         self.config = config
         self.pipeline = pipeline
 
-        # In order to set up obs space, we need to loop through the model columns
-        # as well as the custom reward variables and understand what are keys
-        # and what values need to be scaled
+        self.window_end = self.pipeline['pipeline']['model_data_config']['past_events']
 
 
     def live_data(self):
@@ -82,6 +82,8 @@ class StateBuilder:
                 continue
 
         self.episode_length = len(current_df) - self.pipeline['pipeline']['model_data_config']['past_events']
+
+        self.total_timesteps = len(date_list) * self.episode_length
         
         if self.pipeline['pipeline']['model_data_config']['columns']:
             columns_keys = list(self.pipeline['pipeline']['model_data_config']['columns'].keys())
@@ -90,17 +92,54 @@ class StateBuilder:
         return None
     
 
-    def initialise_state(self) -> dict:
+    def initialise_state(self, custom_variables: dict) -> None:
         # Setup counters
+        self.state_counters = {
+            'step': 0,
+            'episode': 0
+        }
+
+        # Grab the first window of data
+        state_df = self.final_dataframe.iloc[self.state_counters['step']:self.state_counters['step']+self.window_end]
+
         # Loop through model data config columns and save three lists 
         # A key list, a scale list and an unscaled list
-        # If list not empty, append to a temp dataframe
-        # Scale the scale columns as needed using a scale function, via an apply function
-        # Create custom reward variables dictionary as class attribute
-        # For now the dictionary element values are descriptions, keys are the variable names
-        # Call the initial_reward_variables function to calculate the initial values
-        # Return the state dictionary
-        pass
+        self.key_columns = []
+        self.scale_columns = []
+        self.unscaled_columns = []
+
+        for key, value in self.pipeline['pipeline']['model_data_config']['columns'].items():
+            if value[0]==True:
+                self.key_columns.append(key)
+            elif value[1]==True:
+                self.scale_columns.append(key)
+            else:
+                self.unscaled_columns.append(key)
+
+        # Create an empty dataframe
+        temp_dataframe = pd.DataFrame()
+        
+        # If scale_columns list not empty, append to a temp dataframe
+        if self.scale_columns:
+            temp_dataframe = state_df[self.scale_columns]
+
+            scaled_data = self.SCALER.fit_transform(temp_dataframe)
+
+            temp_dataframe = pd.DataFrame(scaled_data, columns=self.scale_columns)
+
+        # If unscale_columns list not empty, append to temp dataframe
+        if self.unscaled_columns:
+            temp_dataframe = pd.concat([temp_dataframe, state_df[self.unscaled_columns]], axis=1)
+
+        # Add the default custom reward values
+        if custom_variables:
+            for key, value in custom_variables.items():
+                temp_dataframe[key] = value
+
+        # store the state dictionary
+        self.state = temp_dataframe.to_dict(orient='list')
+
+        return None
 
     
     def state_step(self) -> dict:
