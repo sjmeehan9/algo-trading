@@ -3,7 +3,7 @@ from ..data_sourcing.state_builder import StateBuilder
 from ..envs.trading_env import TradingEnv
 from..reward_functions.profit_seeker import ProfitSeeker
 
-class TrainRL():
+class TrainRL:
     def __init__(self, config: dict, pipeline: dict):
         self.logger = logging.getLogger(__name__)
 
@@ -61,10 +61,10 @@ class TrainRL():
         # Instanciate reward function object
         self.reward = self.reward_factory(self.reward_name)
 
-        reward_variables = self.reward.initial_reward_variables()
+        reward_variables, custom_variables = self.reward.initial_reward_variables()
+
+        # Contruct initial state dictionary
+        self.state_builder.initialise_state(reward_variables, custom_variables)
 
         # Instanciate environment object
         self.env = self.env_factory(self.env_name)
-
-        # Contruct initial state dictionary
-        self.state_builder.initialise_state(reward_variables)
