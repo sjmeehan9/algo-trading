@@ -15,9 +15,7 @@ class TrainRL:
 
         self.reward_name = self.pipeline['pipeline']['model']['model_reward']
         self.env_name = self.pipeline['pipeline']['env_config']['env_name']
-
-        # Build a factory function to instanciate the model type
-        # The model type is selected in the pipeline config
+        self.model = self.pipeline['pipeline']['model']['model_type']
 
 
     def data_setup(self) -> dict:
@@ -48,6 +46,14 @@ class TrainRL:
         else:
             self.logger.error('reward_name not recognised')
             return None
+        
+
+    def model_factory(self, model: str) -> object:
+        if model == 'ppo':
+            return self.train_ppo()
+        else:
+            self.logger.error('model_type not recognised')
+            return None
 
 
     def train_ppo(self):
@@ -61,10 +67,11 @@ class TrainRL:
         # Instanciate reward function object
         self.reward = self.reward_factory(self.reward_name)
 
-        reward_variables, custom_variables = self.reward.initial_reward_variables()
-
         # Contruct initial state dictionary
-        self.state_builder.initialise_state(reward_variables, custom_variables)
+        self.state_builder.initialise_state(self.reward)
 
         # Instanciate environment object
         self.env = self.env_factory(self.env_name)
+
+        # Run training
+        self.model_factory(self.model)

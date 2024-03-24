@@ -19,8 +19,7 @@
             "whatToShow": "TRADES"
         },
         "env_config": {
-            "env_name": "trading_env",
-            "action_space_size": 3
+            "env_name": "trading_env"
         },
         "model_data_config": {
             "columns": {

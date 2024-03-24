@@ -6,6 +6,7 @@ import numpy as np
 class TradingEnv(Env):
     DEFAULT_SPACE_MIN = 0
     DEFAULT_SPACE_MAX = 10000
+    ACTION_SPACE_SIZE = 3
 
     def __init__(self, state_builder: object):
         self.logger = logging.getLogger(__name__)
@@ -13,9 +14,7 @@ class TradingEnv(Env):
         self.state_builder = state_builder
 
         # Actions we can take
-        num_actions = self.state_builder.pipeline['pipeline']['env_config']['action_space_size']
-
-        self.action_space = Discrete(num_actions)
+        self.action_space = Discrete(self.ACTION_SPACE_SIZE)
 
         # Observation space
         self.observation_space = self._create_obs_space()
@@ -23,6 +22,8 @@ class TradingEnv(Env):
 
     def _create_obs_space(self) -> None:
         space_dict = {}
+
+        custom_variables = self.state_builder.reward.CUSTOM_VARIABLES
         
         # Create the obs space from the StateBuilder data
         for key, value in self.state_builder.pipeline['pipeline']['model_data_config']['columns'].items():
@@ -37,10 +38,10 @@ class TradingEnv(Env):
                 space_dict[key] = Box(low=min(self.DEFAULT_SPACE_MIN), 
                                       high=max(self.DEFAULT_SPACE_MAX), 
                                       shape=(len(self.state_builder.state[key]),), 
-                                      dtype=np.int32)
+                                      dtype=np.float32)
         
-        if self.state_builder.custom_variables:
-            for key, value in self.state_builder.custom_variables.items():
+        if custom_variables:
+            for key, value in custom_variables.items():
                 space_dict[key] = Box(low=value[0], 
                                       high=value[1], 
                                       shape=(len(self.state_builder.state[key]),), 
@@ -66,4 +67,4 @@ class TradingEnv(Env):
 
     def close(self) -> None:
         # Placeholder for close function
-        pass
+        return None

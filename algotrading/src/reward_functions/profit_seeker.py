@@ -14,6 +14,6 @@ class ProfitSeeker:
         # Build function with calc instructions for each custom reward variable
 
     # Dictionary of custom reward variables set to initial values
-    def initial_reward_variables(self) -> tuple:
+    def initial_reward_variables(self) -> dict:
         reward_variables = {k: 0 for k in self.CUSTOM_VARIABLES.keys()}
-        return reward_variables, self.CUSTOM_VARIABLES
+        return reward_variables

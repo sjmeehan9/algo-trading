@@ -92,15 +92,16 @@ class StateBuilder:
         return None
     
 
-    def initialise_state(self, reward_variables: dict, custom_variables: dict) -> None:
+    def initialise_state(self, reward: object) -> None:
         # Setup counters
         self.state_counters = {
             'step': 0,
             'episode': 0
         }
 
-        self.reward_variables = reward_variables
-        self.custom_variables = custom_variables
+        self.reward = reward
+
+        self.reward_variables = self.reward.initial_reward_variables()
 
         # Grab the first window of data
         state_df = self.final_dataframe.iloc[self.state_counters['step']:self.state_counters['step']+self.window_end]
