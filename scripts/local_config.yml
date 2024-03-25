@@ -31,6 +31,8 @@ date_list:
 # Settings for task 2
 data_mode: historical
 
+input_model: ppo_0000
+
 save_to_file: ppo_0001
 
 training_date_list: []

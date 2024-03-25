@@ -1,21 +1,25 @@
 import logging
+import os
+from stable_baselines3 import PPO
 from ..data_sourcing.state_builder import StateBuilder
 from ..envs.trading_env import TradingEnv
-from..reward_functions.profit_seeker import ProfitSeeker
+from ..reward_functions.profit_seeker import ProfitSeeker
 
 class TrainRL:
-    def __init__(self, config: dict, pipeline: dict):
+    def __init__(self, config: dict, pipeline: dict, path_dict: dict):
         self.logger = logging.getLogger(__name__)
 
         self.config = config
         self.pipeline = pipeline
+        self.path_dict = path_dict
 
         # Instanciate StateBuilder object
         self.state_builder = StateBuilder(self.config, self.pipeline)
 
         self.reward_name = self.pipeline['pipeline']['model']['model_reward']
         self.env_name = self.pipeline['pipeline']['env_config']['env_name']
-        self.model = self.pipeline['pipeline']['model']['model_type']
+        self.model_type = self.pipeline['pipeline']['model']['model_type']
+        self.model_filename = self.config['save_to_file']
 
 
     def data_setup(self) -> dict:
@@ -48,16 +52,33 @@ class TrainRL:
             return None
         
 
-    def model_factory(self, model: str) -> object:
-        if model == 'ppo':
+    def model_factory(self, model_type: str) -> object:
+        if model_type == 'ppo':
             return self.train_ppo()
         else:
             self.logger.error('model_type not recognised')
             return None
 
 
-    def train_ppo(self):
-        pass
+    def train_ppo(self) -> None:
+        # Load input model or create new model
+        if os.path.exists(self.path_dict['input_filepath']):
+            self.model = PPO.load(self.path_dict['input_filepath'])
+            self.logger.info(f'Loaded model from {self.path_dict["input_filepath"]}')
+        else:
+            self.model = PPO('MultiInputPolicy', self.env, verbose=1, tensorboard_log=self.path_dict['tensorboard_path'])
+            self.logger.info('Created new model')
+        
+        # Train the model
+        self.model.learn(total_timesteps=self.state_builder.total_timesteps)
+
+        # Save the model
+        self.model.save(self.path_dict['model_filepath'])
+
+        # Revisit saving the session info
+        #TODO
+
+        return None
 
 
     def start(self):
@@ -74,4 +95,4 @@ class TrainRL:
         self.env = self.env_factory(self.env_name)
 
         # Run training
-        self.model_factory(self.model)
+        self.model_factory(self.model_type)
