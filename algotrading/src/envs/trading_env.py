@@ -32,26 +32,27 @@ class TradingEnv(Env):
             elif value[1]==True:
                 space_dict[key] = Box(low=min(self.state_builder.state[key]), 
                                       high=max(self.state_builder.state[key]), 
-                                      shape=(len(self.state_builder.state[key]),), 
+                                      shape=self.state_builder.state[key].shape, 
                                       dtype=np.float32)
             else:
                 space_dict[key] = Box(low=min(self.DEFAULT_SPACE_MIN), 
                                       high=max(self.DEFAULT_SPACE_MAX), 
-                                      shape=(len(self.state_builder.state[key]),), 
+                                      shape=self.state_builder.state[key].shape, 
                                       dtype=np.float32)
         
         if custom_variables:
             for key, value in custom_variables.items():
                 space_dict[key] = Box(low=value[0], 
                                       high=value[1], 
-                                      shape=(len(self.state_builder.state[key]),), 
+                                      shape=self.state_builder.state[key].shape, 
                                       dtype=value[2])
         
         return Dict(space_dict)
 
 
-    def step(self, action: int) -> tuple:
-        # Placeholder for step function
+    def step(self, action: int, backtest_mode: bool = False) -> tuple:
+        self.state_builder.state_step(action)
+
         pass
 
 
@@ -60,9 +61,16 @@ class TradingEnv(Env):
         pass
 
 
-    def reset(self) -> dict:
-        # Placeholder for reset function
-        pass
+    def reset(self, seed) -> dict:
+        super().reset(seed=seed)
+
+        self.state_builder.update_episode_counter()
+
+        self.state_builder.reward.reset_env_globals()
+
+        info = {}
+
+        return self.state_builder.state, info
 
 
     def close(self) -> None:

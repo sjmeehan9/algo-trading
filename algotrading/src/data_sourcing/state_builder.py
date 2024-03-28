@@ -1,5 +1,6 @@
 from datetime import datetime
 import logging
+import numpy as np
 import os
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
@@ -104,7 +105,9 @@ class StateBuilder:
         self.reward_variables = self.reward.initial_reward_variables()
 
         # Grab the first window of data
-        state_df = self.final_dataframe.iloc[self.state_counters['step']:self.state_counters['step']+self.window_end]
+        frame_start = self.state_counters['step']
+        frame_end = self.state_counters['step'] + self.window_end
+        state_df = self.final_dataframe.iloc[frame_start:frame_end]
 
         # Loop through model data config columns and save three lists 
         # A key list, a scale list and an unscaled list
@@ -143,17 +146,59 @@ class StateBuilder:
         # store the state dictionary
         self.state = temp_dataframe.to_dict(orient='list')
 
+        self.state = {key: np.array(value) for key, value in self.state.items()}
+
         return None
 
     
-    def state_step(self) -> dict:
-        # Increment the counters
-        # Using the lists from the initialise_state function, grab the next window of data
-        # If list not empty, append to a temp dataframe
-        # Scale the scale columns as needed using a scale function, via an apply function
+    def state_step(self, action: int) -> None:
+        self.state_counters['step'] += 1
+
+        # Grab the next window of data
+        frame_start = self.state_counters['step'] * self.state_counters['episode']
+        frame_end = self.state_counters['step'] * self.state_counters['episode'] + self.window_end
+        state_df = self.final_dataframe.iloc[frame_start:frame_end]
+
+        # Create an empty dataframe
+        temp_dataframe = pd.DataFrame()
+        
+        # If scale_columns list not empty, append to a temp dataframe
+        if self.scale_columns:
+            temp_dataframe = state_df[self.scale_columns]
+
+            scaled_data = self.SCALER.fit_transform(temp_dataframe)
+
+            temp_dataframe = pd.DataFrame(scaled_data, columns=self.scale_columns)
+
+        # If unscale_columns list not empty, append to temp dataframe
+        if self.unscaled_columns:
+            temp_dataframe = pd.concat([temp_dataframe, state_df[self.unscaled_columns]], axis=1)
+        
         # For the custom variables, grab the previous step values from the last step
-        # Drop the earliest row and add columns to dataframe
+        reward_variable_dict = {key: self.state[key][1:] for key, value in self.reward_variables.items()}
+
+        # Check if the episode is over
+        if self.state_counters['step'] / self.state_counters['episode'] == self.episode_length:
+            self.update_episode_counter()
+            self.terminated = True
+        else:
+            self.terminated = False
+
         # Call each reward variable function to calculate the new values for the latest time
+        reward_variable_dict = self.reward.reward_variable_step(action, state_df, reward_variable_dict, self.terminated)
+
+        # Construct step action vs current position dict in reward_variable_step
+        # Call each reward_variable_step sub function to calculate the new values for the latest time
+        # Update the reward_variables dictionary with the new values
         # Leverage calcs from the financials module
-        # Return the state dictionary
-        pass
+
+        # Within the reward function and not here, calculate the reward for the current step
+
+        # Write to state dictionary
+        
+        return None
+
+
+    def update_episode_counter(self) -> None:
+        self.state_counters['episode'] += 1
+        return None
