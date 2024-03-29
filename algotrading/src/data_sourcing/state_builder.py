@@ -179,7 +179,6 @@ class StateBuilder:
 
         # Check if the episode is over
         if self.state_counters['step'] / self.state_counters['episode'] == self.episode_length:
-            self.update_episode_counter()
             self.terminated = True
         else:
             self.terminated = False
