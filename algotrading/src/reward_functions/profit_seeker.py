@@ -8,8 +8,8 @@ class ProfitSeeker(Financials):
         'trade_change': [0, 10000, np.float32],
         'running_profit': [-10000, 10000, np.float32]
     }
-    CURRENT_PRICE = 0.0
-    RUN_PROFIT = 0
+    PRICE_PAID = 0.0
+    SET_PROFIT = 0
 
     def __init__(self, config: dict, pipeline: dict):
         super().__init__()
@@ -24,8 +24,8 @@ class ProfitSeeker(Financials):
     
 
     def reset_env_globals(self) -> None:
-        self.CURRENT_PRICE = 0
-        self.RUN_PROFIT = 0
+        self.PRICE_PAID = 0
+        self.SET_PROFIT = 0
         return None
     
 
@@ -108,22 +108,22 @@ class ProfitSeeker(Financials):
         self.strike_sell = self.strike_price * self.commision_factor
         self.new_buy = self.new_price / self.commision_factor
         self.new_sell = self.new_price * self.commision_factor
-        self.current_buy = self.CURRENT_PRICE / self.commision_factor
-        self.current_sell = self.CURRENT_PRICE * self.commision_factor
+        self.price_paid_buy = self.PRICE_PAID / self.commision_factor
+        self.price_paid_sell = self.PRICE_PAID * self.commision_factor
 
         price_dict = {
-            'hold_nothing': self.CURRENT_PRICE,
-            'hold_long_position': self.CURRENT_PRICE,
-            'hold_short_position': self.CURRENT_PRICE,
+            'hold_nothing': self.PRICE_PAID,
+            'hold_long_position': self.PRICE_PAID,
+            'hold_short_position': self.PRICE_PAID,
             'buy_long': self.strike_price,
             'sell_short': self.strike_price,
             'sell_position': 0.0,
             'buyback_short': 0.0,
-            'false_buy': self.CURRENT_PRICE,
-            'false_sell': self.CURRENT_PRICE
+            'false_buy': self.PRICE_PAID,
+            'false_sell': self.PRICE_PAID
         }
 
-        self.CURRENT_PRICE = price_dict[self.action_type]
+        self.PRICE_PAID = price_dict[self.action_type]
 
         return None
     
@@ -131,14 +131,14 @@ class ProfitSeeker(Financials):
     def trade_change_update(self, reward_variable_dict: dict) -> dict:
         price_dict = {
             'hold_nothing': 0.0,
-            'hold_long_position': (self.new_sell / self.current_buy - 1) * 100,
-            'hold_short_position': (self.current_sell / self.new_buy - 1) * 100,
+            'hold_long_position': (self.new_sell / self.price_paid_buy - 1) * 100,
+            'hold_short_position': (self.price_paid_sell / self.new_buy - 1) * 100,
             'buy_long': (self.new_sell / self.strike_buy - 1) * 100,
             'sell_short': (self.strike_sell / self.new_buy - 1) * 100,
             'sell_position': 0.0,
             'buyback_short': 0.0,
-            'false_buy': (self.new_sell / self.current_buy - 1) * 100,
-            'false_sell': (self.current_sell / self.new_buy - 1) * 100
+            'false_buy': (self.new_sell / self.price_paid_buy - 1) * 100,
+            'false_sell': (self.price_paid_sell / self.new_buy - 1) * 100
         }
 
         reward_variable_dict['trade_change'] = np.append(reward_variable_dict['trade_change'], price_dict[self.action_type])
@@ -147,25 +147,39 @@ class ProfitSeeker(Financials):
     
 
     def running_profit_update(self, reward_variable_dict: dict) -> dict:
-        # TODO
-        # self.RUN_PROFIT is for current trade and the dict variable is overall session
-        # current trade profit is just trade price added together
-        # overall session profit is the sum of all trade profits
+        session_profit = reward_variable_dict['running_profit'][-1]
+        local_profit = self.SET_PROFIT
+        trade_change = reward_variable_dict['trade_change'][-1]
+        last_trade_change = reward_variable_dict['trade_change'][-2]
 
-        price_dict = {
-            'hold_nothing': self.RUN_PROFIT,
-            'hold_long_position': self.RUN_PROFIT + (self.new_sell / self.current_buy - 1) * 100,
-            'hold_short_position': self.RUN_PROFIT + (self.current_sell / self.new_buy - 1) * 100,
-            'buy_long': self.RUN_PROFIT - self.strike_price,
-            'sell_short': self.RUN_PROFIT + self.strike_price,
+        set_profit_dict = {
+            'hold_nothing': local_profit,
+            'hold_long_position': local_profit,
+            'hold_short_position': local_profit,
+            'buy_long': session_profit,
+            'sell_short': session_profit,
             'sell_position': 0.0,
             'buyback_short': 0.0,
-            'false_buy': self.RUN_PROFIT + (self.new_price - self.CURRENT_PRICE),
-            'false_sell': self.RUN_PROFIT + (self.CURRENT_PRICE - self.new_price)
+            'false_buy': local_profit,
+            'false_sell': local_profit
         }
 
-        self.RUN_PROFIT = price_dict[self.action_type]
+        self.SET_PROFIT = set_profit_dict[self.action_type]
 
-        reward_variable_dict['running_profit'] = np.append(reward_variable_dict['running_profit'], self.RUN_PROFIT)
+        state_update_dict = {
+            'hold_nothing': session_profit,
+            'hold_long_position': local_profit + trade_change,
+            'hold_short_position': local_profit + trade_change,
+            'buy_long': self.SET_PROFIT + trade_change,
+            'sell_short': self.SET_PROFIT + trade_change,
+            'sell_position': local_profit + last_trade_change,
+            'buyback_short': local_profit + last_trade_change,
+            'false_buy': local_profit + trade_change,
+            'false_sell': local_profit + trade_change
+        }
+
+        state_update = state_update_dict[self.action_type]
+
+        reward_variable_dict['running_profit'] = np.append(reward_variable_dict['running_profit'], state_update)
 
         return reward_variable_dict
