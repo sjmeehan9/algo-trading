@@ -35,8 +35,8 @@
             "model_type": "ppo",
             "model_reward": "profit_seeker",
             "model_config": {
-                "n_steps": 128,
-                "batch_size": 32,
+                "n_steps": 1914,
+                "batch_size": 957,
                 "gamma": 0.99,
                 "gae_lambda": 0.95,
                 "clip_range": 0.2,

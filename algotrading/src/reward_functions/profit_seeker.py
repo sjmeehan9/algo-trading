@@ -1,18 +1,22 @@
 import logging
 import numpy as np
+import pandas as pd
+import warnings
 from ..trading.financials import Financials
 
 class ProfitSeeker(Financials):
     CUSTOM_VARIABLES = {
-        'current_position': [0, 2, np.int32],
-        'trade_change': [0, 10000, np.float32],
-        'running_profit': [-10000, 10000, np.float32]
+        'current_position': [0, 2, np.int64],
+        'trade_change': [-10000, 10000, np.float64],
+        'running_profit': [-10000, 10000, np.float64]
     }
     PRICE_PAID = 0.0
     SET_PROFIT = 0
 
     def __init__(self, config: dict, pipeline: dict):
         super().__init__()
+
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
 
         self.logger = logging.getLogger(__name__)
 
@@ -65,14 +69,14 @@ class ProfitSeeker(Financials):
         return None
     
 
-    def reward_variable_step(self, action: int, state_df: dict, reward_variable_dict: dict, terminated: bool) -> dict:
+    def reward_variable_step(self, action: int, state: dict, reward_variable_dict: dict, terminated: bool) -> dict:
         self.current_position = reward_variable_dict['current_position'][-1]
 
         self.determine_action_type(action, terminated)
 
         reward_variable_dict = self.current_position_update(action, reward_variable_dict)
 
-        self.current_price_update(state_df)
+        self.current_price_update(state)
 
         reward_variable_dict = self.trade_change_update(reward_variable_dict)
 
@@ -100,7 +104,7 @@ class ProfitSeeker(Financials):
         return reward_variable_dict
     
 
-    def current_price_update(self, state_df: dict) -> None:
+    def current_price_update(self, state_df: pd.DataFrame) -> None:
         self.strike_price = state_df['close'].iloc[-2]
         self.new_price = state_df['close'].iloc[-1]
 
@@ -183,3 +187,27 @@ class ProfitSeeker(Financials):
         reward_variable_dict['running_profit'] = np.append(reward_variable_dict['running_profit'], state_update)
 
         return reward_variable_dict
+    
+
+    def calculate_reward(self, state: dict) -> float:
+        base_reward = 10
+
+        action_reward_dict = {
+            'hold_nothing': 0,
+            'hold_long_position': 1,
+            'hold_short_position': 1,
+            'buy_long': 10,
+            'sell_short': 10,
+            'sell_position': 5,
+            'buyback_short': 5,
+            'false_buy': -10,
+            'false_sell': -10
+        }
+
+        action_reward = action_reward_dict[self.action_type]
+
+        trade_profit_reward = state['trade_change'][-1] * 50
+
+        running_profit_reward = state['running_profit'][-1] * 5
+        
+        return base_reward + action_reward + trade_profit_reward + running_profit_reward

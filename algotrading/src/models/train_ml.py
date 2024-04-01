@@ -41,7 +41,6 @@ class TrainML:
 
         self.input_filename = self.config['input_model']
 
-        # Check if filename exists in pipeline_data_path
         self.input_filepath = os.path.join(pipeline_data_path, self.input_filename)
         path_dict['input_filepath'] = self.input_filepath
 

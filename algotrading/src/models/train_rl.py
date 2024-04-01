@@ -1,6 +1,7 @@
 import logging
 import os
 from stable_baselines3 import PPO
+from stable_baselines3.common.env_checker import check_env
 from ..data_sourcing.state_builder import StateBuilder
 from ..envs.trading_env import TradingEnv
 from ..reward_functions.profit_seeker import ProfitSeeker
@@ -19,6 +20,7 @@ class TrainRL:
         self.reward_name = self.pipeline['pipeline']['model']['model_reward']
         self.env_name = self.pipeline['pipeline']['env_config']['env_name']
         self.model_type = self.pipeline['pipeline']['model']['model_type']
+        self.model_config = self.pipeline['pipeline']['model']['model_config']
         self.model_filename = self.config['save_to_file']
 
 
@@ -38,7 +40,13 @@ class TrainRL:
 
     def env_factory(self, env_name: str) -> object:
         if env_name == 'trading_env':
-            return TradingEnv(self.state_builder)
+            env = TradingEnv(self.state_builder)
+            try:
+                check_env(env)
+                return env
+            except Exception as e:
+                self.logger.error(f'Environment check failed: {e}')
+                raise e
         else:
             self.logger.error('env_name not recognised')
             return None
@@ -66,7 +74,7 @@ class TrainRL:
             self.model = PPO.load(self.path_dict['input_filepath'])
             self.logger.info(f'Loaded model from {self.path_dict["input_filepath"]}')
         else:
-            self.model = PPO('MultiInputPolicy', self.env, verbose=1, tensorboard_log=self.path_dict['tensorboard_path'])
+            self.model = PPO('MultiInputPolicy', self.env, n_steps=self.model_config['n_steps'], batch_size=self.model_config['batch_size'], verbose=1, tensorboard_log=self.path_dict['tensorboard_path'])
             self.logger.info('Created new model')
         
         # Train the model

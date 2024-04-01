@@ -9,6 +9,8 @@ class TradingEnv(Env):
     ACTION_SPACE_SIZE = 3
 
     def __init__(self, state_builder: object):
+        super().__init__()
+
         self.logger = logging.getLogger(__name__)
 
         self.state_builder = state_builder
@@ -33,12 +35,12 @@ class TradingEnv(Env):
                 space_dict[key] = Box(low=min(self.state_builder.state[key]), 
                                       high=max(self.state_builder.state[key]), 
                                       shape=self.state_builder.state[key].shape, 
-                                      dtype=np.float32)
+                                      dtype=np.float64)
             else:
                 space_dict[key] = Box(low=min(self.DEFAULT_SPACE_MIN), 
                                       high=max(self.DEFAULT_SPACE_MAX), 
                                       shape=self.state_builder.state[key].shape, 
-                                      dtype=np.float32)
+                                      dtype=np.float64)
         
         if custom_variables:
             for key, value in custom_variables.items():
@@ -53,7 +55,12 @@ class TradingEnv(Env):
     def step(self, action: int, backtest_mode: bool = False) -> tuple:
         self.state_builder.state_step(action)
 
-        pass
+        # Within the reward function, calculate the reward for the current step
+        reward = self.state_builder.reward.calculate_reward(self.state_builder.state)
+        
+        info = {}
+
+        return self.state_builder.state, reward, self.state_builder.terminated, False, info
 
 
     def render(self, mode: str = 'human') -> None:
@@ -61,13 +68,7 @@ class TradingEnv(Env):
         pass
 
 
-    def reset(self, seed) -> dict:
-        super().reset(seed=seed)
-
-        self.state_builder.update_episode_counter()
-
-        self.state_builder.reward.reset_env_globals()
-
+    def reset(self, seed=None, options=None) -> dict:
         info = {}
 
         return self.state_builder.state, info

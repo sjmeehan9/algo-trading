@@ -97,7 +97,7 @@ class StateBuilder:
         # Setup counters
         self.state_counters = {
             'step': 0,
-            'episode': 0
+            'episode': 1
         }
 
         self.reward = reward
@@ -155,8 +155,8 @@ class StateBuilder:
         self.state_counters['step'] += 1
 
         # Grab the next window of data
-        frame_start = self.state_counters['step'] * self.state_counters['episode']
-        frame_end = self.state_counters['step'] * self.state_counters['episode'] + self.window_end
+        frame_start = self.state_counters['step']
+        frame_end = self.state_counters['step'] + self.window_end
         state_df = self.final_dataframe.iloc[frame_start:frame_end]
 
         # Create an empty dataframe
@@ -186,14 +186,16 @@ class StateBuilder:
         # Call each reward variable function to calculate the new values for the latest time
         reward_variable_dict = self.reward.reward_variable_step(action, state_df, reward_variable_dict, self.terminated)
 
-        # Construct step action vs current position dict in reward_variable_step
-        # Call each reward_variable_step sub function to calculate the new values for the latest time
-        # Update the reward_variables dictionary with the new values
-        # Leverage calcs from the financials module
+        # store the state dictionary
+        self.state = temp_dataframe.to_dict(orient='list')
 
-        # Within the reward function and not here, calculate the reward for the current step
+        self.state = {key: np.array(value) for key, value in self.state.items()}
 
-        # Write to state dictionary
+        self.state.update(reward_variable_dict)
+
+        if self.terminated:
+            self.update_episode_counter()
+            self.reward.reset_env_globals()
         
         return None
 
