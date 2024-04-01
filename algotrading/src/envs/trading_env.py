@@ -64,7 +64,6 @@ class TradingEnv(Env):
 
 
     def render(self, mode: str = 'human') -> None:
-        # Placeholder for render function
         pass
 
 
@@ -75,5 +74,4 @@ class TradingEnv(Env):
 
 
     def close(self) -> None:
-        # Placeholder for close function
         return None

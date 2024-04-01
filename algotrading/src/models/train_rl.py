@@ -7,12 +7,13 @@ from ..envs.trading_env import TradingEnv
 from ..reward_functions.profit_seeker import ProfitSeeker
 
 class TrainRL:
-    def __init__(self, config: dict, pipeline: dict, path_dict: dict):
+    def __init__(self, config: dict, pipeline: dict, path_dict: dict, session: dict):
         self.logger = logging.getLogger(__name__)
 
         self.config = config
         self.pipeline = pipeline
         self.path_dict = path_dict
+        self.session = session
 
         # Instanciate StateBuilder object
         self.state_builder = StateBuilder(self.config, self.pipeline)
@@ -22,6 +23,20 @@ class TrainRL:
         self.model_type = self.pipeline['pipeline']['model']['model_type']
         self.model_config = self.pipeline['pipeline']['model']['model_config']
         self.model_filename = self.config['save_to_file']
+
+
+    def write_session_info(self, session: dict) -> dict:
+        session_info = {
+            'model': self.model_filename,
+            'reward_function': self.reward_name,
+            'env': self.env_name,
+            'training_dates': self.config['training_date_list'],
+            'total_timesteps': self.state_builder.total_timesteps,
+            'data_mode': self.config['data_mode'],
+            'episode_length': self.state_builder.episode_length
+        }
+
+        return session.update(session_info)
 
 
     def data_setup(self) -> dict:
@@ -83,15 +98,12 @@ class TrainRL:
         # Save the model
         self.model.save(self.path_dict['model_filepath'])
 
-        # Revisit saving the session info
-        #TODO
-
         return None
 
 
-    def start(self):
+    def start(self) -> dict:
         # Setup the data feed
-        self.state = self.data_setup()
+        self.data_setup()
 
         # Instanciate reward function object
         self.reward = self.reward_factory(self.reward_name)
@@ -104,3 +116,5 @@ class TrainRL:
 
         # Run training
         self.model_factory(self.model_type)
+
+        return self.write_session_info(self.session)
