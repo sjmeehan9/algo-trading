@@ -7,13 +7,12 @@ from ..envs.trading_env import TradingEnv
 from ..reward_functions.profit_seeker import ProfitSeeker
 
 class TrainRL:
-    def __init__(self, config: dict, pipeline: dict, path_dict: dict, session: dict):
+    def __init__(self, config: dict, pipeline: dict, path_dict: dict):
         self.logger = logging.getLogger(__name__)
 
         self.config = config
         self.pipeline = pipeline
         self.path_dict = path_dict
-        self.session = session
 
         # Instanciate StateBuilder object
         self.state_builder = StateBuilder(self.config, self.pipeline)
@@ -22,21 +21,27 @@ class TrainRL:
         self.env_name = self.pipeline['pipeline']['env_config']['env_name']
         self.model_type = self.pipeline['pipeline']['model']['model_type']
         self.model_config = self.pipeline['pipeline']['model']['model_config']
+        self.model_input = self.config['input_model']
         self.model_filename = self.config['save_to_file']
 
 
     def write_session_info(self, session: dict) -> dict:
+        training_dates = [d.isoformat() for d in self.config['training_date_list']]
+
         session_info = {
             'model': self.model_filename,
+            'input_model': self.model_input,
             'reward_function': self.reward_name,
             'env': self.env_name,
-            'training_dates': self.config['training_date_list'],
+            'training_dates': training_dates,
             'total_timesteps': self.state_builder.total_timesteps,
             'data_mode': self.config['data_mode'],
             'episode_length': self.state_builder.episode_length
         }
 
-        return session.update(session_info)
+        session.update(session_info)
+
+        return session
 
 
     def data_setup(self) -> dict:
@@ -93,7 +98,7 @@ class TrainRL:
             self.logger.info('Created new model')
         
         # Train the model
-        self.model.learn(total_timesteps=self.state_builder.total_timesteps)
+        self.model.learn(total_timesteps=self.state_builder.total_timesteps, tb_log_name=self.model_filename)
 
         # Save the model
         self.model.save(self.path_dict['model_filepath'])
@@ -101,7 +106,7 @@ class TrainRL:
         return None
 
 
-    def start(self) -> dict:
+    def start(self) -> None:
         # Setup the data feed
         self.data_setup()
 
@@ -117,4 +122,4 @@ class TrainRL:
         # Run training
         self.model_factory(self.model_type)
 
-        return self.write_session_info(self.session)
+        return None

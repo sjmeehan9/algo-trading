@@ -34,6 +34,7 @@
             "pipeline_type": "rl",
             "model_type": "ppo",
             "model_reward": "profit_seeker",
+            "file_extension": ".zip",
             "model_config": {
                 "n_steps": 1914,
                 "batch_size": 957,
