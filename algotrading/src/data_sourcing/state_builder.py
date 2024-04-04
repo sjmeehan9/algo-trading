@@ -16,8 +16,6 @@ class StateBuilder:
         self.config = config
         self.pipeline = pipeline
 
-        self.window_end = self.pipeline['pipeline']['model_data_config']['past_events']
-
 
     def live_data(self):
         pass
@@ -103,6 +101,8 @@ class StateBuilder:
         self.reward = reward
 
         self.reward_variables = self.reward.initial_reward_variables()
+
+        self.window_end = self.pipeline['pipeline']['model_data_config']['past_events']
 
         # Grab the first window of data
         frame_start = self.state_counters['step']
