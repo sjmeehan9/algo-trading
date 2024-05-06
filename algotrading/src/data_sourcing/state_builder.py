@@ -50,6 +50,8 @@ class StateBuilder:
 
         self.final_dataframe = pd.DataFrame()
 
+        self.training_date_list = date_list.copy()
+
         for date in date_list:
             filename = '{}_{}_{}{:02d}{:02d}.csv'.format(
                 contract_info['symbol'],
@@ -61,7 +63,10 @@ class StateBuilder:
 
             file_path = os.path.join(pipeline_data_path, filename)
 
-            if not os.path.exists(file_path):
+            if os.path.exists(file_path):
+                self.logger.info(f'Reading: {filename}')
+            else:
+                self.training_date_list.remove(date)
                 self.logger.info(f'Skipping: {filename} (file not found or not a CSV file)')
                 continue
             
@@ -82,7 +87,7 @@ class StateBuilder:
 
         self.episode_length = len(current_df) - self.pipeline['pipeline']['model_data_config']['past_events']
 
-        self.total_timesteps = len(date_list) * self.episode_length
+        self.total_timesteps = len(self.training_date_list) * self.episode_length
         
         if self.pipeline['pipeline']['model_data_config']['columns']:
             columns_keys = list(self.pipeline['pipeline']['model_data_config']['columns'].keys())

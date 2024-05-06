@@ -26,7 +26,7 @@ class TrainRL:
 
 
     def write_session_info(self, session: dict) -> dict:
-        training_dates = [d.isoformat() for d in self.config['training_date_list']]
+        training_dates = [d.isoformat() for d in self.state_builder.training_date_list]
 
         session_info = {
             'model': self.model_filename,
