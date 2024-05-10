@@ -91,7 +91,7 @@ class TrainRL:
     def train_ppo(self) -> None:
         # Load input model or create new model
         if os.path.exists(self.path_dict['input_filepath']):
-            self.model = PPO.load(self.path_dict['input_filepath'])
+            self.model = PPO.load(self.path_dict['input_filepath'], self.env)
             self.logger.info(f'Loaded model from {self.path_dict["input_filepath"]}')
         else:
             self.model = PPO('MultiInputPolicy', self.env, n_steps=self.model_config['n_steps'], batch_size=self.model_config['batch_size'], verbose=1, tensorboard_log=self.path_dict['tensorboard_path'])

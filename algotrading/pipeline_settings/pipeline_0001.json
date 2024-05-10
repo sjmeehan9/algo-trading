@@ -24,8 +24,12 @@
         "model_data_config": {
             "columns": {
                 "date": [true, false],
+                "open": [false, true],
+                "high": [false, true],
+                "low": [false, true],
                 "close": [false, true],
-                "volume": [false, true]
+                "volume": [false, true],
+                "count": [false, true]
             },
             "file_trim": 0.1,
             "past_events": 60

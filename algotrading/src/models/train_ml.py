@@ -40,8 +40,9 @@ class TrainML:
             os.makedirs(tensorboard_path)
 
         self.input_filename = self.config['input_model']
+        model_file_ext = self.pipeline['pipeline']['model']['file_extension']
 
-        self.input_filepath = os.path.join(pipeline_data_path, self.input_filename)
+        self.input_filepath = os.path.join(pipeline_data_path, self.input_filename + model_file_ext)
         path_dict['input_filepath'] = self.input_filepath
 
         self.model_filename = self.config['save_to_file']
@@ -49,7 +50,6 @@ class TrainML:
         # Check if filename exists in pipeline_data_path
         self.model_filepath = os.path.join(pipeline_data_path, self.model_filename)
         path_dict['model_filepath'] = self.model_filepath
-        model_file_ext = self.pipeline['pipeline']['model']['file_extension']
 
         if os.path.exists(self.model_filepath + model_file_ext):
             # Ask user if they want to overwrite the file

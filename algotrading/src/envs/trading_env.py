@@ -40,7 +40,7 @@ class TradingEnv(Env):
                 space_dict[key] = Box(low=min(self.DEFAULT_SPACE_MIN), 
                                       high=max(self.DEFAULT_SPACE_MAX), 
                                       shape=self.state_builder.state[key].shape, 
-                                      dtype=np.float64)
+                                      dtype=np.int64)
         
         if custom_variables:
             for key, value in custom_variables.items():
@@ -53,12 +53,16 @@ class TradingEnv(Env):
 
 
     def step(self, action: int, backtest_mode: bool = False) -> tuple:
+        self.logger.info('step taken')
+        
         self.state_builder.state_step(action)
 
         # Within the reward function, calculate the reward for the current step
         reward = self.state_builder.reward.calculate_reward(self.state_builder.state)
         
         info = {}
+
+        self.logger.info(f'new step number: {self.state_builder.state_counters["step"]}')
 
         return self.state_builder.state, reward, self.state_builder.terminated, False, info
 
@@ -68,6 +72,21 @@ class TradingEnv(Env):
 
 
     def reset(self, seed=None, options=None) -> dict:
+        self.logger.info('env reset')
+
+        self.state_builder.state_counters['step'] = 0
+
+        self.logger.info(f'terminated {self.state_builder.terminated}')
+        self.logger.info(f'timed_out {self.state_builder.timed_out}')
+        self.logger.info(f'new step number {self.state_builder.state_counters["step"]}')
+
+        if self.state_builder.terminated:
+            self.state_builder.update_episode_counter()
+            self.state_builder.reward.reset_env_globals()
+
+        if not self.state_builder.timed_out:
+            self.state_builder.initialise_state(self.state_builder.reward)
+
         info = {}
 
         return self.state_builder.state, info

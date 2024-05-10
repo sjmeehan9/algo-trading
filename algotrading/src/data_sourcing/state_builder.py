@@ -16,6 +16,8 @@ class StateBuilder:
         self.config = config
         self.pipeline = pipeline
 
+        self.initialise_counters()
+
 
     def live_data(self):
         pass
@@ -96,12 +98,21 @@ class StateBuilder:
         return None
     
 
-    def initialise_state(self, reward: object) -> None:
+    def initialise_counters(self) -> None:
         # Setup counters
         self.state_counters = {
             'step': 0,
+            'window': 0,
             'episode': 1
         }
+
+        return None
+
+
+    def initialise_state(self, reward: object) -> None:
+        self.terminated = False
+
+        self.timed_out = False
 
         self.reward = reward
 
@@ -109,9 +120,13 @@ class StateBuilder:
 
         self.window_end = self.pipeline['pipeline']['model_data_config']['past_events']
 
+        self.file_offset = self.state_counters['window'] * (self.episode_length + self.window_end)
+
+        self.file_step = self.state_counters['step'] + self.file_offset
+
         # Grab the first window of data
-        frame_start = self.state_counters['step']
-        frame_end = self.state_counters['step'] + self.window_end
+        frame_start = self.file_step
+        frame_end = self.file_step + self.window_end
         state_df = self.final_dataframe.iloc[frame_start:frame_end]
 
         # Loop through model data config columns and save three lists 
@@ -159,10 +174,17 @@ class StateBuilder:
     def state_step(self, action: int) -> None:
         self.state_counters['step'] += 1
 
+        self.file_offset = self.state_counters['window'] * (self.episode_length + self.window_end)
+
+        self.file_step = self.state_counters['step'] + self.file_offset
+
         # Grab the next window of data
-        frame_start = self.state_counters['step']
-        frame_end = self.state_counters['step'] + self.window_end
+        frame_start = self.file_step
+        frame_end = self.file_step + self.window_end
         state_df = self.final_dataframe.iloc[frame_start:frame_end]
+
+        self.logger.info(f'first frame date: {state_df["date"].iloc[0]}')
+        self.logger.info(f'last frame date: {state_df["date"].iloc[-1]}')
 
         # Create an empty dataframe
         temp_dataframe = pd.DataFrame()
@@ -183,10 +205,12 @@ class StateBuilder:
         reward_variable_dict = {key: self.state[key][1:] for key, value in self.reward_variables.items()}
 
         # Check if the episode is over
-        if self.state_counters['step'] / self.state_counters['episode'] == self.episode_length:
+        if self.state_counters['step'] == self.episode_length:
             self.terminated = True
-        else:
-            self.terminated = False
+
+        # Check if total_timesteps has been reached
+        if self.state_counters['step'] * self.state_counters['episode'] == self.total_timesteps:
+            self.timed_out = True
 
         # Call each reward variable function to calculate the new values for the latest time
         reward_variable_dict = self.reward.reward_variable_step(action, state_df, reward_variable_dict, self.terminated)
@@ -197,14 +221,11 @@ class StateBuilder:
         self.state = {key: np.array(value) for key, value in self.state.items()}
 
         self.state.update(reward_variable_dict)
-
-        if self.terminated:
-            self.update_episode_counter()
-            self.reward.reset_env_globals()
         
         return None
 
 
     def update_episode_counter(self) -> None:
+        self.state_counters['window'] += 1
         self.state_counters['episode'] += 1
         return None

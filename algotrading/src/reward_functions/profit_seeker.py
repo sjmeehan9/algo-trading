@@ -11,7 +11,7 @@ class ProfitSeeker(Financials):
         'running_profit': [-10000, 10000, np.float64]
     }
     PRICE_PAID = 0.0
-    SET_PROFIT = 0
+    SET_PROFIT = 0.0
 
     def __init__(self, config: dict, pipeline: dict):
         super().__init__()
@@ -28,8 +28,8 @@ class ProfitSeeker(Financials):
     
 
     def reset_env_globals(self) -> None:
-        self.PRICE_PAID = 0
-        self.SET_PROFIT = 0
+        self.PRICE_PAID = 0.0
+        self.SET_PROFIT = 0.0
         return None
     
 
@@ -65,6 +65,9 @@ class ProfitSeeker(Financials):
                 self.action_type = 'false_sell'
         else:
             self.logger.error('Action type not recognised')
+
+        self.logger.info(f'current position: {self.current_position}')
+        self.logger.info(f'action type: {self.action_type}')
         
         return None
     
@@ -101,6 +104,8 @@ class ProfitSeeker(Financials):
 
         reward_variable_dict['current_position'] = np.append(reward_variable_dict['current_position'], position_dict[self.action_type])
 
+        self.logger.info(f'new current position: {position_dict[self.action_type]}')
+
         return reward_variable_dict
     
 
@@ -129,6 +134,10 @@ class ProfitSeeker(Financials):
 
         self.PRICE_PAID = price_dict[self.action_type]
 
+        self.logger.info(f'previous price: {self.strike_price}')
+        self.logger.info(f'new price: {self.new_price}')
+        self.logger.info(f'price paid: {self.PRICE_PAID}')
+
         return None
     
     
@@ -146,6 +155,8 @@ class ProfitSeeker(Financials):
         }
 
         reward_variable_dict['trade_change'] = np.append(reward_variable_dict['trade_change'], price_dict[self.action_type])
+
+        self.logger.info(f'trade change: {price_dict[self.action_type]}')
 
         return reward_variable_dict
     
@@ -186,28 +197,40 @@ class ProfitSeeker(Financials):
 
         reward_variable_dict['running_profit'] = np.append(reward_variable_dict['running_profit'], state_update)
 
+        self.logger.info(f'running profit: {state_update}')
+
         return reward_variable_dict
     
 
     def calculate_reward(self, state: dict) -> float:
-        base_reward = 10
+        base_reward = 0
 
         action_reward_dict = {
             'hold_nothing': 0,
-            'hold_long_position': 1,
-            'hold_short_position': 1,
+            'hold_long_position': 2,
+            'hold_short_position': 2,
             'buy_long': 10,
             'sell_short': 10,
-            'sell_position': 5,
-            'buyback_short': 5,
-            'false_buy': -10,
-            'false_sell': -10
+            'sell_position': 1,
+            'buyback_short': 1,
+            'false_buy': -50,
+            'false_sell': -50
         }
 
         action_reward = action_reward_dict[self.action_type]
 
-        trade_profit_reward = state['trade_change'][-1] * 50
+        if state['trade_change'][-1] > 0:
+            trade_profit_reward = state['trade_change'][-1] * 200
+        else:
+            trade_profit_reward = state['trade_change'][-1] * 10
 
-        running_profit_reward = state['running_profit'][-1] * 5
+        if state['running_profit'][-1] > 0:
+            running_profit_reward = state['running_profit'][-1] * 5
+        else:
+            running_profit_reward = state['running_profit'][-1] * 2
+
+        reward = base_reward + action_reward + trade_profit_reward + running_profit_reward
+
+        self.logger.info(f'step reward: {reward}')
         
-        return base_reward + action_reward + trade_profit_reward + running_profit_reward
+        return reward
