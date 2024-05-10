@@ -22,38 +22,34 @@ class BackTest:
         pipeline_data_path = os.path.join(saved_data_path, f'{self.pipeline_name}/')
         path_dict['pipeline_data_path'] = pipeline_data_path
 
-        tensorboard_path = os.path.join(pipeline_data_path, 'tensorboard/')
-        path_dict['tensorboard_path'] = tensorboard_path
-
-        # Create log and data folders
+        # Check if path exists, if not raise an error
         if not os.path.exists(saved_data_path):
-            os.makedirs(saved_data_path)
+            raise FileNotFoundError(f'{saved_data_path} does not exist, no input model will be found')
 
         if not os.path.exists(pipeline_data_path):
-            os.makedirs(pipeline_data_path)
+            raise FileNotFoundError(f'{pipeline_data_path} does not exist, no input model will be found')
 
-        if not os.path.exists(tensorboard_path):
-            os.makedirs(tensorboard_path)
-
-        self.input_filename = self.config['input_model']
+        self.input_filename = self.config['test_model']
         model_file_ext = self.pipeline['pipeline']['model']['file_extension']
 
         self.input_filepath = os.path.join(pipeline_data_path, self.input_filename + model_file_ext)
         path_dict['input_filepath'] = self.input_filepath
 
-        self.model_filename = self.config['save_to_file']
+        if os.path.exists(self.input_filepath):
+            self.logger.info(f'Input model found at: {self.input_filepath}')
+        else:
+            raise FileNotFoundError(f'Input model not found at: {self.input_filepath}')
+        
+        backtest_data_path = os.path.join(data_path, 'backtest/')
+        path_dict['backtest_data_path'] = backtest_data_path
 
-        # Check if filename exists in pipeline_data_path
-        self.model_filepath = os.path.join(pipeline_data_path, self.model_filename)
-        path_dict['model_filepath'] = self.model_filepath
+        pipeline_backtest_path = os.path.join(backtest_data_path, f'{self.pipeline_name}/')
+        path_dict['pipeline_backtest_path'] = pipeline_backtest_path
 
-        if os.path.exists(self.model_filepath + model_file_ext):
-            # Ask user if they want to overwrite the file
-            overwrite = input(f'{self.model_filename} already exists. Do you want to overwrite it? (y/n) ')
-            if overwrite == 'n':
-                raise FileExistsError(f'{self.model_filename} already exists')
-            
-        self.audit_filepath = os.path.join(pipeline_data_path, self.AUDIT_FILENAME)
-        path_dict['audit_filepath'] = self.audit_filepath
+        if not os.path.exists(backtest_data_path):
+            os.makedirs(backtest_data_path)
+
+        if not os.path.exists(pipeline_backtest_path):
+            os.makedirs(pipeline_backtest_path)
 
         return path_dict
