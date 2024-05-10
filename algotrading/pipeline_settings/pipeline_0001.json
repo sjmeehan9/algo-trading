@@ -17,6 +17,51 @@
         "live_data_config": {
             "barSizeSetting": 5,
             "whatToShow": "TRADES"
+        },
+        "env_config": {
+            "env_name": "trading_env"
+        },
+        "model_data_config": {
+            "columns": {
+                "date": [true, false],
+                "open": [false, true],
+                "high": [false, true],
+                "low": [false, true],
+                "close": [false, true],
+                "volume": [false, true],
+                "count": [false, true]
+            },
+            "file_trim": 0.1,
+            "past_events": 60
+        },
+        "model": {
+            "pipeline_type": "rl",
+            "model_type": "ppo",
+            "model_reward": "profit_seeker",
+            "file_extension": ".zip",
+            "model_config": {
+                "n_steps": 1914,
+                "batch_size": 957,
+                "gamma": 0.99,
+                "gae_lambda": 0.95,
+                "clip_range": 0.2,
+                "vf_coef": 0.5,
+                "ent_coef": 0.01,
+                "max_grad_norm": 0.5,
+                "use_sde": false,
+                "sde_sample_freq": -1,
+                "target_kl": 0.01,
+                "tensorboard_log": null,
+                "create_eval_env": false,
+                "policy_kwargs": null,
+                "verbose": 0,
+                "seed": null,
+                "device": "auto",
+                "n_cpu_tf_sess": 1,
+                "n_timesteps": 1000000,
+                "n_eval_episodes": 5,
+                "eval_env": null
+            }
         }
     }
 }

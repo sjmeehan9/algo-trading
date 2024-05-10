@@ -4,6 +4,7 @@ from threading import Timer
 from .data_sourcing.save_historical import PastData
 from .data_sourcing.live_streaming import LiveData
 from .data_sourcing.state_builder import StateBuilder
+from .models.train_ml import TrainML
 from .load_config import pipeline_loader
 
 # Init task functions
@@ -34,12 +35,13 @@ def init_task(config: dict, task_options: list, pipeline: dict) -> None:
         Timer(app.timer, app.stop).start()
         app.run()
     elif task == 'task2':
+        app = TrainML(config, pipeline)
+        app.start()
+    elif task == 'task3':
         app = LiveData(pipeline)
         app.connect(config['ip_address'], config['port'], 0)
         Timer(app.timer, app.stop).start()
-        app.run()
-    elif task == 'task3':
-        app = StateBuilder()
+        app.run()        
     elif task == 'task4':
         pass
     else:
