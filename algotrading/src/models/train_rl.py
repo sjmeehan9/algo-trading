@@ -20,6 +20,7 @@ class TrainRL:
         self.reward_name = self.pipeline['pipeline']['model']['model_reward']
         self.env_name = self.pipeline['pipeline']['env_config']['env_name']
         self.model_type = self.pipeline['pipeline']['model']['model_type']
+        self.model_policy = self.pipeline['pipeline']['model']['model_policy']
         self.model_config = self.pipeline['pipeline']['model']['model_config']
         self.model_input = self.config['input_model']
         self.model_filename = self.config['save_to_file']
@@ -94,7 +95,7 @@ class TrainRL:
             self.model = PPO.load(self.path_dict['input_filepath'], self.env)
             self.logger.info(f'Loaded model from {self.path_dict["input_filepath"]}')
         else:
-            self.model = PPO('MultiInputPolicy', self.env, n_steps=self.model_config['n_steps'], batch_size=self.model_config['batch_size'], verbose=1, tensorboard_log=self.path_dict['tensorboard_path'])
+            self.model = PPO(self.model_policy, self.env, n_steps=self.model_config['n_steps'], batch_size=self.model_config['batch_size'], verbose=1, tensorboard_log=self.path_dict['tensorboard_path'])
             self.logger.info('Created new model')
         
         # Train the model
