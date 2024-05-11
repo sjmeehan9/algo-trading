@@ -23,13 +23,19 @@ class StateBuilder:
         pass
 
 
-    def read_data(self) -> None:
+    def read_data(self, data_mode: str = 'training') -> None:
         data_path = self.config['data_path']
         saved_data_path = os.path.join(data_path, 'saved_data/')
         pipeline_name = self.pipeline['pipeline']['filename']
         pipeline_data_path = os.path.join(saved_data_path, f'{pipeline_name}/')
 
-        date_list = self.config['training_date_list']
+        if data_mode == 'training':
+            date_list = self.config['training_date_list']
+        elif data_mode == 'backtest':
+            date_list = self.config['backtest_date_list']
+        else:
+            self.logger.error('data_mode not recognised')
+            raise ValueError('data_mode not recognised')
 
         # If training_date_list is empty, add all filenames in the pipeline_data_path to date_list
         if not date_list:

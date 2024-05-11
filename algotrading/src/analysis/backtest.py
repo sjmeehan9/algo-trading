@@ -1,5 +1,6 @@
 import logging
 import os
+from ..data_sourcing.state_builder import StateBuilder
 
 class BackTest:
     def __init__(self, config: dict, pipeline: dict):
@@ -9,6 +10,9 @@ class BackTest:
         self.pipeline = pipeline
 
         self.path_dict = self._path_setup()
+
+        # Instanciate StateBuilder object
+        self.state_builder = StateBuilder(self.config, self.pipeline)
 
 
     def _path_setup(self) -> dict:
@@ -53,3 +57,12 @@ class BackTest:
             os.makedirs(pipeline_backtest_path)
 
         return path_dict
+
+
+    def start(self) -> None:
+        self.logger.info('Backtesting started')
+
+        self.state_builder.read_data(data_mode='backtest')
+        self.logger.info('Data read from historical files')
+
+        return None
