@@ -1,5 +1,6 @@
 import logging
 import os
+import pandas as pd
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_checker import check_env
 from ..data_sourcing.state_builder import StateBuilder
@@ -7,12 +8,16 @@ from ..envs.trading_env import TradingEnv
 from ..reward_functions.profit_seeker import ProfitSeeker
 
 class TrainRL:
-    def __init__(self, config: dict, pipeline: dict, path_dict: dict):
+    REWARD = 'reward'
+    ACTION = 'action'
+
+    def __init__(self, config: dict, pipeline: dict, path_dict: dict, evaluate: bool):
         self.logger = logging.getLogger(__name__)
 
         self.config = config
         self.pipeline = pipeline
         self.path_dict = path_dict
+        self.evaluate = evaluate
 
         # Instanciate StateBuilder object
         self.state_builder = StateBuilder(self.config, self.pipeline)
@@ -20,13 +25,14 @@ class TrainRL:
         self.reward_name = self.pipeline['pipeline']['model']['model_reward']
         self.env_name = self.pipeline['pipeline']['env_config']['env_name']
         self.model_type = self.pipeline['pipeline']['model']['model_type']
+        self.model_policy = self.pipeline['pipeline']['model']['model_policy']
         self.model_config = self.pipeline['pipeline']['model']['model_config']
         self.model_input = self.config['input_model']
         self.model_filename = self.config['save_to_file']
 
 
     def write_session_info(self, session: dict) -> dict:
-        training_dates = [d.isoformat() for d in self.state_builder.training_date_list]
+        training_dates = [d.isoformat() for d in self.state_builder.master_date_list]
 
         session_info = {
             'model': self.model_filename,
@@ -46,7 +52,7 @@ class TrainRL:
 
     def data_setup(self) -> dict:
         if self.config['data_mode'] == 'historical':
-            self.state_builder.read_data()
+            self.state_builder.read_data(self.evaluate)
             self.logger.info('Data read from historical files')
             return None
         elif self.config['data_mode'] == 'live':
@@ -80,13 +86,72 @@ class TrainRL:
             return None
         
 
-    def model_factory(self, model_type: str) -> object:
+    def training_factory(self, model_type: str) -> object:
         if model_type == 'ppo':
             return self.train_ppo()
         else:
             self.logger.error('model_type not recognised')
             return None
+        
+    
+    def evaluate_factory(self, model_type: str) -> None:
+        if model_type == 'ppo':
+            self.model = PPO.load(self.path_dict['eval_filepath'], self.env)
+            self.logger.info(f'Loaded model from {self.path_dict["eval_filepath"]}')
+        else:
+            self.logger.error('model_type not recognised')
+        
+        self.evaluate_model()
+        
+        return None
+    
 
+    def evaluate_model(self) -> None:
+        while not self.state_builder.timed_out:
+            state, info = self.env.reset()
+            self.logger.info('Environment reset complete')
+
+            self.eval_dataframe = self.state_builder.state_df.copy()
+
+            self.eval_dataframe[self.REWARD] = 0.0
+            self.eval_dataframe[self.ACTION] = 0
+
+            # Add the custom variables to the dataframe
+            for key in self.reward.CUSTOM_VARIABLES.keys():
+                self.eval_dataframe[key] = state[key]
+
+            # Loop through the environment
+            while not self.state_builder.terminated:
+                action, _states = self.model.predict(state)
+
+                state, reward, terminated, truncated, info = self.env.step(action)
+
+                # Get the index of the last row
+                last_row_index = self.state_builder.state_df.index[-1]
+
+                # Select and copy the last row
+                last_row = self.state_builder.state_df.loc[[last_row_index]].copy()
+
+                # Loop through each key and update the copy
+                for key in self.reward.CUSTOM_VARIABLES.keys():
+                    last_row[key] = state[key][-1]
+
+                last_row[self.REWARD] = reward
+                last_row[self.ACTION] = action.item()
+
+                # Append the modified last row to eval_dataframe
+                self.eval_dataframe = pd.concat([self.eval_dataframe, last_row], ignore_index=True)
+            
+            self.logger.info('Episode terminated')
+
+            # Save eval_dataframe to CSV file after the loop terminates
+            eval_date = self.state_builder.master_date_list[self.state_builder.state_counters['window']].strftime("%Y%m%d")
+            csv_file_name = f'{self.path_dict["pipeline_backtest_path"]}{eval_date}.csv'
+            self.eval_dataframe.to_csv(csv_file_name, index=False)
+            self.logger.info(f'Saved eval_dataframe to {csv_file_name}')
+        
+        return None
+    
 
     def train_ppo(self) -> None:
         # Load input model or create new model
@@ -94,7 +159,7 @@ class TrainRL:
             self.model = PPO.load(self.path_dict['input_filepath'], self.env)
             self.logger.info(f'Loaded model from {self.path_dict["input_filepath"]}')
         else:
-            self.model = PPO('MultiInputPolicy', self.env, n_steps=self.model_config['n_steps'], batch_size=self.model_config['batch_size'], verbose=1, tensorboard_log=self.path_dict['tensorboard_path'])
+            self.model = PPO(self.model_policy, self.env, n_steps=self.model_config['n_steps'], batch_size=self.model_config['batch_size'], verbose=1, tensorboard_log=self.path_dict['tensorboard_path'])
             self.logger.info('Created new model')
         
         # Train the model
@@ -119,7 +184,11 @@ class TrainRL:
         # Instanciate environment object
         self.env = self.env_factory(self.env_name)
 
-        # Run training
-        self.model_factory(self.model_type)
+        if self.evaluate:
+            # Run backtest
+            self.evaluate_factory(self.model_type)
+        else:
+            # Run training
+            self.training_factory(self.model_type)
 
         return None
