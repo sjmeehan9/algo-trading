@@ -22,15 +22,16 @@ date_list:
 # Settings for task 2
 data_mode: historical
 
-input_model: ppo_0001
+input_model: ppo_0002
 
-save_to_file: ppo_0002
+save_to_file: ppo_0003
 
 training_date_list:
   - 2024-01-12
+  - 2024-01-19
 
 # Settings for task 4
-backtest_model: ppo_0002
+backtest_model: ppo_0003
 
 backtest_date_list:
   - 2024-01-12
