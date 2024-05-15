@@ -9,31 +9,28 @@ log_path: logs/
 
 data_path: data/
 
-task_selection: task2
+task_selection: task4
 
 # Settings for task 1
 date_list:
-  - 2024-01-13
-  - 2024-01-14
-  - 2024-01-15
-  - 2024-01-16
-  - 2024-01-17
-  - 2024-01-18
+  - 2024-01-20
+  - 2024-01-21
+  - 2024-01-22
+  - 2024-01-23
+  - 2024-01-24
 
 # Settings for task 2
 data_mode: historical
 
-input_model: ppo_0000
+input_model: ppo_0001
 
-save_to_file: ppo_0000
+save_to_file: ppo_0002
 
 training_date_list:
   - 2024-01-12
-  - 2024-01-19
 
 # Settings for task 4
-test_model: ppo_0000
+backtest_model: ppo_0002
 
 backtest_date_list:
   - 2024-01-12
-  - 2024-01-19

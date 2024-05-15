@@ -3,7 +3,6 @@ from pathlib import Path
 from threading import Timer
 from .data_sourcing.save_historical import PastData
 from .data_sourcing.live_streaming import LiveData
-from .data_sourcing.state_builder import StateBuilder
 from .models.train_ml import TrainML
 from .load_config import pipeline_loader
 
@@ -38,12 +37,15 @@ def init_task(config: dict, task_options: list, pipeline: dict) -> None:
         app = TrainML(config, pipeline)
         app.start()
     elif task == 'task3':
+        pass
+    elif task == 'task4':
+        app = TrainML(config, pipeline, True)
+        app.start()
+    elif task == 'task5':
         app = LiveData(pipeline)
         app.connect(config['ip_address'], config['port'], 0)
         Timer(app.timer, app.stop).start()
-        app.run()        
-    elif task == 'task4':
-        pass
+        app.run()
     else:
         raise ValueError(f'{task} is not a valid task')
 

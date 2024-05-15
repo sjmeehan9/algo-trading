@@ -52,7 +52,7 @@ class TradingEnv(Env):
         return Dict(space_dict)
 
 
-    def step(self, action: int, backtest_mode: bool = False) -> tuple:
+    def step(self, action: int) -> tuple:
         self.logger.info('step taken')
         
         self.state_builder.state_step(action)

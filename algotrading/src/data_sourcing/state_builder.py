@@ -23,21 +23,18 @@ class StateBuilder:
         pass
 
 
-    def read_data(self, data_mode: str = 'training') -> None:
+    def read_data(self, evaluate: bool) -> None:
         data_path = self.config['data_path']
         saved_data_path = os.path.join(data_path, 'saved_data/')
         pipeline_name = self.pipeline['pipeline']['filename']
         pipeline_data_path = os.path.join(saved_data_path, f'{pipeline_name}/')
 
-        if data_mode == 'training':
-            date_list = self.config['training_date_list']
-        elif data_mode == 'backtest':
+        if evaluate:
             date_list = self.config['backtest_date_list']
         else:
-            self.logger.error('data_mode not recognised')
-            raise ValueError('data_mode not recognised')
+            date_list = self.config['training_date_list']
 
-        # If training_date_list is empty, add all filenames in the pipeline_data_path to date_list
+        # If date_list is empty, add all filenames in the pipeline_data_path to date_list
         if not date_list:
             date_text = [f[:self.START_DATEPART][self.END_DATEPART:] for f in os.listdir(pipeline_data_path) if os.path.isfile(os.path.join(pipeline_data_path, f)) and f.endswith('.csv')]
 
@@ -58,7 +55,7 @@ class StateBuilder:
 
         self.final_dataframe = pd.DataFrame()
 
-        self.training_date_list = date_list.copy()
+        self.master_date_list = date_list.copy()
 
         for date in date_list:
             filename = '{}_{}_{}{:02d}{:02d}.csv'.format(
@@ -74,7 +71,7 @@ class StateBuilder:
             if os.path.exists(file_path):
                 self.logger.info(f'Reading: {filename}')
             else:
-                self.training_date_list.remove(date)
+                self.master_date_list.remove(date)
                 self.logger.info(f'Skipping: {filename} (file not found or not a CSV file)')
                 continue
             
@@ -95,7 +92,7 @@ class StateBuilder:
 
         self.episode_length = len(current_df) - self.pipeline['pipeline']['model_data_config']['past_events']
 
-        self.total_timesteps = len(self.training_date_list) * self.episode_length
+        self.total_timesteps = len(self.master_date_list) * self.episode_length
         
         if self.pipeline['pipeline']['model_data_config']['columns']:
             columns_keys = list(self.pipeline['pipeline']['model_data_config']['columns'].keys())
@@ -133,7 +130,7 @@ class StateBuilder:
         # Grab the first window of data
         frame_start = self.file_step
         frame_end = self.file_step + self.window_end
-        state_df = self.final_dataframe.iloc[frame_start:frame_end]
+        self.state_df = self.final_dataframe.iloc[frame_start:frame_end]
 
         # Loop through model data config columns and save three lists 
         # A key list, a scale list and an unscaled list
@@ -154,7 +151,7 @@ class StateBuilder:
         
         # If scale_columns list not empty, append to a temp dataframe
         if self.scale_columns:
-            temp_dataframe = state_df[self.scale_columns]
+            temp_dataframe = self.state_df[self.scale_columns]
 
             scaled_data = self.SCALER.fit_transform(temp_dataframe)
 
@@ -162,7 +159,7 @@ class StateBuilder:
 
         # If unscale_columns list not empty, append to temp dataframe
         if self.unscaled_columns:
-            temp_dataframe = pd.concat([temp_dataframe, state_df[self.unscaled_columns]], axis=1)
+            temp_dataframe = pd.concat([temp_dataframe, self.state_df[self.unscaled_columns]], axis=1)
 
         # Add the default custom reward values
         if self.reward_variables:
@@ -187,17 +184,17 @@ class StateBuilder:
         # Grab the next window of data
         frame_start = self.file_step
         frame_end = self.file_step + self.window_end
-        state_df = self.final_dataframe.iloc[frame_start:frame_end]
+        self.state_df = self.final_dataframe.iloc[frame_start:frame_end]
 
-        self.logger.info(f'first frame date: {state_df["date"].iloc[0]}')
-        self.logger.info(f'last frame date: {state_df["date"].iloc[-1]}')
+        self.logger.info(f'first frame date: {self.state_df["date"].iloc[0]}')
+        self.logger.info(f'last frame date: {self.state_df["date"].iloc[-1]}')
 
         # Create an empty dataframe
         temp_dataframe = pd.DataFrame()
         
         # If scale_columns list not empty, append to a temp dataframe
         if self.scale_columns:
-            temp_dataframe = state_df[self.scale_columns]
+            temp_dataframe = self.state_df[self.scale_columns]
 
             scaled_data = self.SCALER.fit_transform(temp_dataframe)
 
@@ -205,7 +202,7 @@ class StateBuilder:
 
         # If unscale_columns list not empty, append to temp dataframe
         if self.unscaled_columns:
-            temp_dataframe = pd.concat([temp_dataframe, state_df[self.unscaled_columns]], axis=1)
+            temp_dataframe = pd.concat([temp_dataframe, self.state_df[self.unscaled_columns]], axis=1)
         
         # For the custom variables, grab the previous step values from the last step
         reward_variable_dict = {key: self.state[key][1:] for key, value in self.reward_variables.items()}
@@ -219,7 +216,7 @@ class StateBuilder:
             self.timed_out = True
 
         # Call each reward variable function to calculate the new values for the latest time
-        reward_variable_dict = self.reward.reward_variable_step(action, state_df, reward_variable_dict, self.terminated)
+        reward_variable_dict = self.reward.reward_variable_step(action, self.state_df, reward_variable_dict, self.terminated)
 
         # store the state dictionary
         self.state = temp_dataframe.to_dict(orient='list')

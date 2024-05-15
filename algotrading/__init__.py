@@ -1,4 +1,3 @@
-from .src.analysis.backtest import BackTest
 from .src.data_sourcing.save_historical import PastData
 from .src.data_sourcing.live_streaming import LiveData
 from .src.data_sourcing.state_builder import StateBuilder
