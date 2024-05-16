@@ -159,7 +159,9 @@ class StateBuilder:
 
         # If unscale_columns list not empty, append to temp dataframe
         if self.unscaled_columns:
-            temp_dataframe = pd.concat([temp_dataframe, self.state_df[self.unscaled_columns]], axis=1)
+            unscaled_df = self.state_df[self.unscaled_columns].reset_index(drop=True)
+
+            temp_dataframe = pd.concat([temp_dataframe, unscaled_df], axis=1)
 
         # Add the default custom reward values
         if self.reward_variables:
@@ -202,7 +204,9 @@ class StateBuilder:
 
         # If unscale_columns list not empty, append to temp dataframe
         if self.unscaled_columns:
-            temp_dataframe = pd.concat([temp_dataframe, self.state_df[self.unscaled_columns]], axis=1)
+            unscaled_df = self.state_df[self.unscaled_columns].reset_index(drop=True)
+
+            temp_dataframe = pd.concat([temp_dataframe, unscaled_df], axis=1)
         
         # For the custom variables, grab the previous step values from the last step
         reward_variable_dict = {key: self.state[key][1:] for key, value in self.reward_variables.items()}

@@ -1,7 +1,7 @@
 import logging
 import os
 import pandas as pd
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, DQN
 from stable_baselines3.common.env_checker import check_env
 from ..data_sourcing.state_builder import StateBuilder
 from ..envs.trading_env import TradingEnv
@@ -85,19 +85,14 @@ class TrainRL:
             self.logger.error('reward_name not recognised')
             return None
         
-
-    def training_factory(self, model_type: str) -> object:
-        if model_type == 'ppo':
-            return self.train_ppo()
-        else:
-            self.logger.error('model_type not recognised')
-            return None
-        
     
     def evaluate_factory(self, model_type: str) -> None:
         if model_type == 'ppo':
             self.model = PPO.load(self.path_dict['eval_filepath'], self.env)
-            self.logger.info(f'Loaded model from {self.path_dict["eval_filepath"]}')
+            self.logger.info(f'Loaded PPO model from {self.path_dict["eval_filepath"]}')
+        elif model_type == 'dqn':
+            self.model = DQN.load(self.path_dict['eval_filepath'], self.env)
+            self.logger.info(f'Loaded DQN model from {self.path_dict["eval_filepath"]}')
         else:
             self.logger.error('model_type not recognised')
         
@@ -151,16 +146,62 @@ class TrainRL:
             self.logger.info(f'Saved eval_dataframe to {csv_file_name}')
         
         return None
+        
+
+    def training_factory(self, model_type: str) -> object:
+        if model_type == 'ppo':
+            return self.train_ppo()
+        elif model_type == 'dqn':
+            return self.train_dqn()
+        else:
+            self.logger.error('model_type not recognised')
+            return None
+    
+
+    def train_dqn(self) -> None:
+        # Create input arguments for DQN model
+        model_kwargs = {
+            'policy': self.model_policy,
+            'env': self.env,
+            'tensorboard_log': self.path_dict['tensorboard_path']
+        }
+
+        model_kwargs.update(self.model_config)
+
+        # Load input model or create new model
+        if os.path.exists(self.path_dict['input_filepath']):
+            self.model = DQN.load(self.path_dict['input_filepath'], self.env)
+            self.logger.info(f'Loaded DQN model from {self.path_dict["input_filepath"]}')
+        else:
+            self.model = DQN(**model_kwargs)
+            self.logger.info('Created new DQN model')
+        
+        # Train the model
+        self.model.learn(total_timesteps=self.state_builder.total_timesteps, tb_log_name=self.model_filename)
+
+        # Save the model
+        self.model.save(self.path_dict['model_filepath'])
+
+        return None
     
 
     def train_ppo(self) -> None:
+        # Create input arguments for DQN model
+        model_kwargs = {
+            'policy': self.model_policy,
+            'env': self.env,
+            'tensorboard_log': self.path_dict['tensorboard_path']
+        }
+
+        model_kwargs.update(self.model_config)
+
         # Load input model or create new model
         if os.path.exists(self.path_dict['input_filepath']):
             self.model = PPO.load(self.path_dict['input_filepath'], self.env)
-            self.logger.info(f'Loaded model from {self.path_dict["input_filepath"]}')
+            self.logger.info(f'Loaded PPO model from {self.path_dict["input_filepath"]}')
         else:
-            self.model = PPO(self.model_policy, self.env, n_steps=self.model_config['n_steps'], batch_size=self.model_config['batch_size'], verbose=1, tensorboard_log=self.path_dict['tensorboard_path'])
-            self.logger.info('Created new model')
+            self.model = PPO(**model_kwargs)
+            self.logger.info('Created new PPO model')
         
         # Train the model
         self.model.learn(total_timesteps=self.state_builder.total_timesteps, tb_log_name=self.model_filename)

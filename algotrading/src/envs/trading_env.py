@@ -37,10 +37,10 @@ class TradingEnv(Env):
                                       shape=self.state_builder.state[key].shape, 
                                       dtype=np.float64)
             else:
-                space_dict[key] = Box(low=min(self.DEFAULT_SPACE_MIN), 
-                                      high=max(self.DEFAULT_SPACE_MAX), 
+                space_dict[key] = Box(low=self.DEFAULT_SPACE_MIN, 
+                                      high=self.DEFAULT_SPACE_MAX, 
                                       shape=self.state_builder.state[key].shape, 
-                                      dtype=np.int64)
+                                      dtype=np.float64)
         
         if custom_variables:
             for key, value in custom_variables.items():
