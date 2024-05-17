@@ -9,15 +9,20 @@ log_path: logs/
 
 data_path: data/
 
-task_selection: task2
+task_selection: task1
 
 # Settings for task 1
 date_list:
-  - 2024-01-20
-  - 2024-01-21
-  - 2024-01-22
-  - 2024-01-23
-  - 2024-01-24
+  - 2023-01-01
+  - 2023-01-02
+  - 2023-01-03
+  - 2023-01-04
+  - 2023-01-05
+  - 2023-01-06
+  - 2023-01-07
+  - 2023-01-08
+  - 2023-01-09
+  - 2023-01-10
 
 # Settings for task 2
 data_mode: historical

@@ -18,6 +18,7 @@ class PastData(EWrapper, EClient):
     SLEEP_DURATION = 1
     LOAD_DURATION = 10
     TIMEZONE = 'US/Eastern'
+    DATE_COLUMN = 'date'
 
     def __init__(self, config: dict, pipeline: dict):
         EClient.__init__(self, self)
@@ -55,6 +56,8 @@ class PastData(EWrapper, EClient):
         self.contract.currency = contract_info['currency']
         self.contract.primaryExchange = contract_info['primaryExchange']
 
+        self.bar_columns = self.script_config['bar_columns']
+
         self.historical_info = self.pipeline['pipeline']['historical_data_config']
         self.data_df = pd.DataFrame(columns=self.historical_info['columns'])
         self.data_list = []
@@ -88,8 +91,8 @@ class PastData(EWrapper, EClient):
     
 
     def checkDataframe(self, date_requested: str) -> bool:
-        dt_min = self.data_df['date'].min()[:8]
-        dt_max = self.data_df['date'].max()[:8]
+        dt_min = self.data_df[self.DATE_COLUMN].min()[:8]
+        dt_max = self.data_df[self.DATE_COLUMN].max()[:8]
         row_check = (self.step_size['durationNum'] / self.step_size['barSize']) * self.step_size['loops_required']
 
         if dt_min == dt_max and self.data_df.shape[0] == row_check and dt_min == date_requested:
@@ -135,8 +138,14 @@ class PastData(EWrapper, EClient):
             self.CURRENT_BAR = bar.date
 
         elif self.CURRENT_BAR != bar.date:
-            new_row = {'date': bar.date, 'open': bar.open, 'high': bar.high, 'low': bar.low, 
-                    'close': bar.close, 'volume': bar.volume, 'wap': bar.wap, 'count': bar.barCount}
+            new_row = {self.bar_columns['bar_date']: bar.date, 
+                       self.bar_columns['bar_open']: bar.open, 
+                       self.bar_columns['bar_high']: bar.high, 
+                       self.bar_columns['bar_low']: bar.low, 
+                       self.bar_columns['bar_close']: bar.close, 
+                       self.bar_columns['bar_volume']: bar.volume, 
+                       self.bar_columns['bar_wap']: bar.wap, 
+                       self.bar_columns['bar_barCount']: bar.barCount}
             self.data_list.append(new_row)
             self.CURRENT_BAR = bar.date
 
@@ -151,9 +160,10 @@ class PastData(EWrapper, EClient):
 
         if iter_num == 0:
             self.data_df = pd.DataFrame(self.data_list)
+            self.data_df = self.data_df.drop_duplicates(subset=self.DATE_COLUMN)
             self.data_df = self.data_df[self.historical_info['columns']]
             self.data_df = self.data_df.fillna(0)
-            self.data_df = self.data_df.sort_values('date')
+            self.data_df = self.data_df.sort_values(self.DATE_COLUMN)
 
             if self.checkDataframe(date_requested):
                 self.data_df.to_csv('{}/{}_{}_{}.csv'.format(self.folder_name, self.contract.symbol, 
