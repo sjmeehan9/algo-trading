@@ -29,7 +29,7 @@
                 "low": [false, true],
                 "close": [false, true],
                 "volume": [false, true],
-                "count": [false, false]
+                "count": [false, true]
             },
             "file_trim": 0.038,
             "past_events": 60
@@ -41,7 +41,7 @@
             "model_reward": "profit_seeker",
             "file_extension": ".zip",
             "model_config": {
-                "buffer_size": 200000,
+                "buffer_size": 150000,
                 "batch_size": 64,
                 "gamma": 0.99,
                 "verbose": 1
