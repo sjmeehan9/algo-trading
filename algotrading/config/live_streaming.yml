@@ -1,0 +1,10 @@
+# Bar column output names
+bar_columns:
+  bar_date: 'date'
+  bar_open: 'open'
+  bar_high: 'high'
+  bar_low: 'low'
+  bar_close: 'close'
+  bar_volume: 'volume'
+  bar_wap: 'wap'
+  bar_barCount: 'count'

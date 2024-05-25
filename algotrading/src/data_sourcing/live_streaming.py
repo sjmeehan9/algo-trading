@@ -1,20 +1,31 @@
 import logging
+import os
+from pathlib import Path
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
+from ..load_config import config_loader
 
     
 class LiveData(EWrapper, EClient):
+    CONFIG_FILENAME = 'live_streaming.yml'
     CURRENT_BAR = ''
     BASE_SECONDS = 20
     INIT_REQUEST_ID = 1000
 
-    def __init__(self, pipeline: dict):
+    def __init__(self, config: dict, pipeline: dict):
         EClient.__init__(self, self)
 
         self.logger = logging.getLogger(__name__)
         
+        self.config = config
         self.pipeline = pipeline
+
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = Path(current_dir).parents[1]
+
+        config_file_path = os.path.join(parent_dir, 'config/', self.CONFIG_FILENAME)
+        self.script_config = config_loader(config_file_path)
 
         contract_info = self.pipeline['pipeline']['contract_info']
         self.contract = Contract()
@@ -25,6 +36,8 @@ class LiveData(EWrapper, EClient):
         self.contract.primaryExchange = contract_info['primaryExchange']
 
         self.live_info = self.pipeline['pipeline']['live_data_config']
+
+        self.bar_columns = self.script_config['bar_columns']
 
         self.timer = self.setTimer()
 
@@ -57,13 +70,18 @@ class LiveData(EWrapper, EClient):
             self.CURRENT_BAR = time
 
         elif self.CURRENT_BAR != time:
-            new_row = {'date': time, 'open': open_, 'high': high, 'low': low, 
-                    'close': close, 'volume': volume, 'wap': wap, 'count': count}
+            new_row = {self.bar_columns['bar_date']: time, 
+                       self.bar_columns['bar_open']: open_, 
+                       self.bar_columns['bar_high']: high, 
+                       self.bar_columns['bar_low']: low, 
+                       self.bar_columns['bar_close']: close, 
+                       self.bar_columns['bar_volume']: volume, 
+                       self.bar_columns['bar_wap']: wap, 
+                       self.bar_columns['bar_barCount']: count}
             
             self.CURRENT_BAR = time
 
             #TODO: Do something with the data
-            print(new_row)
             self.logger.info(f'New row data: {new_row}')
 
 

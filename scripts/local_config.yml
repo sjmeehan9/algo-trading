@@ -9,7 +9,7 @@ log_path: logs/
 
 data_path: data/
 
-task_selection: task4
+task_selection: task3
 
 # Settings for task 1
 date_list:
