@@ -7,11 +7,13 @@ class StreamFaker:
     START_DATEPART = -4
     END_DATEPART = -8
 
-    def __init__(self, config: dict, pipeline: dict):
+    def __init__(self, config: dict, pipeline: dict, queue: object):
         self.logger = logging.getLogger(__name__)
 
         self.config = config
         self.pipeline = pipeline
+
+        self.queue = queue
 
 
     def read_data(self) -> None:
@@ -76,14 +78,24 @@ class StreamFaker:
 
         self.episode_length = len(current_df) - self.pipeline['pipeline']['model_data_config']['past_events']
         
-        if self.pipeline['pipeline']['model_data_config']['columns']:
-            columns_keys = list(self.pipeline['pipeline']['model_data_config']['columns'].keys())
-            self.final_dataframe = self.final_dataframe[columns_keys]
-        
         return None
 
 
+    def send_data(self) -> None:
+        # Iterate over the final DataFrame
+        for index, row in self.final_dataframe.iterrows():
+            self.logger.info(f'Sending row: {index}')
+
+            bar = row.to_dict()
+
+            self.queue.put(bar)
+
+        return None
+    
+    
     def start(self) -> None:
         self.read_data()
+
+        self.send_data()
 
         return None
