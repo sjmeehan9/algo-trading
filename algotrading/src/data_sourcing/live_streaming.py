@@ -9,6 +9,7 @@ from ..load_config import config_loader
     
 class LiveData(EWrapper, EClient):
     CONFIG_FILENAME = 'live_streaming.yml'
+    HISTORICAL_CONFIG = 'historical_data.yml'
     CURRENT_BAR = ''
     BASE_SECONDS = 20
     INIT_REQUEST_ID = 1000
@@ -27,6 +28,9 @@ class LiveData(EWrapper, EClient):
         config_file_path = os.path.join(parent_dir, 'config/', self.CONFIG_FILENAME)
         self.script_config = config_loader(config_file_path)
 
+        historical_config_path = os.path.join(parent_dir, 'config/', self.HISTORICAL_CONFIG)
+        self.historical_config = config_loader(historical_config_path)
+
         contract_info = self.pipeline['pipeline']['contract_info']
         self.contract = Contract()
         self.contract.symbol = contract_info['symbol']
@@ -36,8 +40,13 @@ class LiveData(EWrapper, EClient):
         self.contract.primaryExchange = contract_info['primaryExchange']
 
         self.live_info = self.pipeline['pipeline']['live_data_config']
+        self.historical_info = self.pipeline['pipeline']['historical_data_config']
 
         self.bar_columns = self.script_config['bar_columns']
+        self.historical_columns = self.historical_config['bar_columns']
+
+        self.step_size = self.historical_config['step_size'][self.historical_info['barSizeSetting']]
+        self.data_list = []
 
         self.timer = self.setTimer()
 
@@ -59,12 +68,48 @@ class LiveData(EWrapper, EClient):
 
     def sendRequests(self) -> None:
 
-        self.reqRealTimeBars(self.req_it, self.contract, self.live_info['barSizeSetting'], 
-                            self.live_info['whatToShow'], True, [])
+        self.reqHistoricalData(self.req_it, self.contract, '', self.step_size['durationString'], 
+                self.historical_info['barSizeSetting'], self.historical_info['whatToShow'], 1, 1, False, [])
         
-    
+
     # Receive historical data
+    def historicalData(self, reqId, bar) -> None:
+
+        if not self.CURRENT_BAR:
+            self.CURRENT_BAR = bar.date
+
+        elif self.CURRENT_BAR != bar.date:
+            new_row = {self.historical_columns['bar_date']: bar.date, 
+                       self.historical_columns['bar_open']: bar.open, 
+                       self.historical_columns['bar_high']: bar.high, 
+                       self.historical_columns['bar_low']: bar.low, 
+                       self.historical_columns['bar_close']: bar.close, 
+                       self.historical_columns['bar_volume']: bar.volume, 
+                       self.historical_columns['bar_wap']: bar.wap, 
+                       self.historical_columns['bar_barCount']: bar.barCount}
+            self.data_list.append(new_row)
+            self.CURRENT_BAR = bar.date
+
+
+    def historicalDataEnd(self, reqId: int, start: str, end: str) -> None:
+
+        self.cancelHistoricalData(reqId)
+
+        self.req_it += 1
+
+        self.reqRealTimeBars(self.req_it, self.contract, self.live_info['barSizeSetting'], 
+                    self.live_info['whatToShow'], True, [])
+
+    
+    # Receive live data
     def realtimeBar(self, reqId, time, open_, high, low, close, volume, wap, count) -> None:
+
+        #TODO: Wait until a new date is being received, if there's overlap in data received
+        # If there's a gap, discard the historical data
+        # Check by seeing if the last current date is 5s diff with the received time
+        # Do above in a new function
+        # If legit, add to date list and send to queue
+        # Log
 
         if not self.CURRENT_BAR:
             self.CURRENT_BAR = time
