@@ -97,18 +97,36 @@ class LiveData(EWrapper, EClient):
 
         self.req_it += 1
 
+        self.logger.info(f'Full data list: {self.data_list}')
+
         self.reqRealTimeBars(self.req_it, self.contract, self.live_info['barSizeSetting'], 
                     self.live_info['whatToShow'], True, [])
+        
+    
+    def dataValidation(self) -> bool:
+            dt_min = self.data_list[0][self.historical_columns['bar_date']]
+            dt_max = self.data_list[-1][self.historical_columns['bar_date']]
+            date_requested = self.data_list[0][self.historical_columns['bar_date']].date()
+    
+            row_check = len(self.data_list)
+    
+            if dt_min == dt_max and len(self.data_list) == row_check and dt_min == date_requested:
+                return True
+            else:
+                return False
 
     
     # Receive live data
     def realtimeBar(self, reqId, time, open_, high, low, close, volume, wap, count) -> None:
 
-        #TODO: Wait until a new date is being received, if there's overlap in data received
+        #TODO:
+        # Check if historical data is complete 
+        # Wait until a new date is being received, if there's overlap in data received
         # If there's a gap, discard the historical data
         # Check by seeing if the last current date is 5s diff with the received time
         # Do above in a new function
-        # If legit, add to date list and send to queue
+        # If legit, truncate to only required columns
+        # add to date list and send to queue
         # Log
 
         if not self.CURRENT_BAR:

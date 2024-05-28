@@ -93,7 +93,7 @@ class StreamFaker:
         return None
     
     
-    def start(self) -> None:
+    def run(self) -> None:
         self.read_data()
 
         self.send_data()

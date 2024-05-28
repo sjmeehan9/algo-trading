@@ -15,6 +15,7 @@
             "whatToShow": "TRADES"
         },
         "live_data_config": {
+            "columns": ["date", "open", "high", "low", "close", "volume", "wap", "count"],
             "barSizeSetting": 5,
             "whatToShow": "TRADES"
         },

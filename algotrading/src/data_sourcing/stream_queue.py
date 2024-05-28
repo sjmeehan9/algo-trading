@@ -9,6 +9,7 @@ class StreamQueue:
 
 
     def put(self, bar: dict) -> None:
+        self.logger.info(f'Putting bar {bar} in queue')
 
         return None
     
