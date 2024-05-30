@@ -1,9 +1,12 @@
+import datetime
+from datetime import timedelta
 import logging
-import os
-from pathlib import Path
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
+import os
+from pathlib import Path
+import pytz
 from ..load_config import config_loader
 
     
@@ -13,6 +16,9 @@ class LiveData(EWrapper, EClient):
     CURRENT_BAR = ''
     BASE_SECONDS = 20
     INIT_REQUEST_ID = 1000
+    TIMEZONE = 'US/Eastern'
+    DATE_COLUMN = 'date'
+    DATE_FORMAT = '%Y%m%d %H:%M:%S %Z'
 
     def __init__(self, config: dict, pipeline: dict):
         EClient.__init__(self, self)
@@ -97,6 +103,12 @@ class LiveData(EWrapper, EClient):
 
         self.req_it += 1
 
+        if self.dataValidation():
+            self.logger.info('Data validation passed')
+        else:
+            self.logger.error('Data validation failed')
+            self.data_list = []
+
         self.logger.info(f'Full data list: {self.data_list}')
 
         self.reqRealTimeBars(self.req_it, self.contract, self.live_info['barSizeSetting'], 
@@ -104,16 +116,36 @@ class LiveData(EWrapper, EClient):
         
     
     def dataValidation(self) -> bool:
-            dt_min = self.data_list[0][self.historical_columns['bar_date']]
-            dt_max = self.data_list[-1][self.historical_columns['bar_date']]
-            date_requested = self.data_list[0][self.historical_columns['bar_date']].date()
-    
-            row_check = len(self.data_list)
-    
-            if dt_min == dt_max and len(self.data_list) == row_check and dt_min == date_requested:
-                return True
-            else:
+        dates = [datetime.strptime(d[self.DATE_COLUMN], self.DATE_FORMAT) for d in self.data_list]
+
+        # Determine the time increment in seconds
+        time_increment = int(self.live_info['barSizeSetting'])
+
+        # Calculate the expected number of entries
+        start_date = dates[0]
+        end_date = dates[-1]
+        expected_count = int((end_date - start_date).total_seconds() / time_increment) + 1
+
+        # Check if the actual count matches the expected count
+        if len(dates) != expected_count:
+            return False
+
+        # Check if all expected datetimes are present
+        current_date = start_date
+        for date in dates:
+            if date != current_date:
                 return False
+            current_date += timedelta(seconds=time_increment)
+
+        return True
+            
+
+    def reformatTime(self, time: int) -> str:
+        dt_utc = datetime.datetime.fromtimestamp(time, pytz.utc)
+        dt_eastern = dt_utc.astimezone(pytz.timezone(self.TIMEZONE))
+        formatted_date = dt_eastern.strftime(f'%Y%m%d %H:%M:%S {self.TIMEZONE}')
+        
+        return formatted_date
 
     
     # Receive live data
@@ -133,7 +165,7 @@ class LiveData(EWrapper, EClient):
             self.CURRENT_BAR = time
 
         elif self.CURRENT_BAR != time:
-            new_row = {self.bar_columns['bar_date']: time, 
+            new_row = {self.bar_columns['bar_date']: self.reformatTime(time), 
                        self.bar_columns['bar_open']: open_, 
                        self.bar_columns['bar_high']: high, 
                        self.bar_columns['bar_low']: low, 
