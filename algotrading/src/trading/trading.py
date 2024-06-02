@@ -11,13 +11,11 @@ class Trading:
         self.config = config
         self.pipeline = pipeline
 
-        self.queue = StreamQueue(self.config, self.pipeline)
-
 
     def start(self) -> None:
         self.logger.info('Algo trading session started')
 
-        # data_stream = StreamFaker(self.config, self.pipeline, self.queue)
+        # data_stream = StreamFaker(self.config, self.pipeline)
         
         data_stream = LiveData(self.config, self.pipeline)
         data_stream.connect(self.config['ip_address'], self.config['port'], 0)

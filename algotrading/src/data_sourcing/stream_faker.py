@@ -2,18 +2,24 @@ from datetime import datetime
 import logging
 import os
 import pandas as pd
+import pytz
+from .stream_queue import StreamQueue
 
 class StreamFaker:
     START_DATEPART = -4
     END_DATEPART = -8
+    TIMEZONE = 'US/Eastern'
+    DATE_COLUMN = 'date'
+    VALID_FORMAT = '%Y%m%d %H:%M:%S'
+    VALID_POS = -11
 
-    def __init__(self, config: dict, pipeline: dict, queue: object):
+    def __init__(self, config: dict, pipeline: dict):
         self.logger = logging.getLogger(__name__)
 
         self.config = config
         self.pipeline = pipeline
 
-        self.queue = queue
+        self.queue = StreamQueue(self.config, self.pipeline)
 
 
     def read_data(self) -> None:
@@ -82,6 +88,9 @@ class StreamFaker:
 
 
     def send_data(self) -> None:
+        # Process DataFrame
+        self.final_dataframe[self.DATE_COLUMN] = self.final_dataframe[self.DATE_COLUMN].apply(self.process_data)
+
         # Iterate over the final DataFrame
         for index, row in self.final_dataframe.iterrows():
             self.logger.info(f'Sending row: {index}')
@@ -91,6 +100,14 @@ class StreamFaker:
             self.queue.put(bar)
 
         return None
+    
+
+    def process_data(self, dt_str) -> int:
+        dt = datetime.strptime(dt_str[:self.VALID_POS], self.VALID_FORMAT)
+        local_dt = pytz.timezone(self.TIMEZONE).localize(dt)
+        epoch_time = int(local_dt.timestamp())
+        
+        return epoch_time
     
     
     def run(self) -> None:

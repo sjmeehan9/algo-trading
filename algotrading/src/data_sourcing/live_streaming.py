@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import pytz
 from ..load_config import config_loader
+from .stream_queue import StreamQueue
 
     
 class LiveData(EWrapper, EClient):
@@ -18,7 +19,8 @@ class LiveData(EWrapper, EClient):
     INIT_REQUEST_ID = 1000
     TIMEZONE = 'US/Eastern'
     DATE_COLUMN = 'date'
-    DATE_FORMAT = '%Y%m%d %H:%M:%S %Z'
+    VALID_FORMAT = '%Y%m%d %H:%M:%S'
+    VALID_POS = -11
 
     def __init__(self, config: dict, pipeline: dict):
         EClient.__init__(self, self)
@@ -27,6 +29,8 @@ class LiveData(EWrapper, EClient):
         
         self.config = config
         self.pipeline = pipeline
+
+        self.queue = StreamQueue(self.config, self.pipeline)
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
         parent_dir = Path(current_dir).parents[1]
@@ -75,7 +79,7 @@ class LiveData(EWrapper, EClient):
     def sendRequests(self) -> None:
 
         self.reqHistoricalData(self.req_it, self.contract, '', self.step_size['durationString'], 
-                self.historical_info['barSizeSetting'], self.historical_info['whatToShow'], 1, 1, False, [])
+                self.historical_info['barSizeSetting'], self.historical_info['whatToShow'], 1, 2, False, [])
         
 
     # Receive historical data
@@ -103,28 +107,35 @@ class LiveData(EWrapper, EClient):
 
         self.req_it += 1
 
-        if self.dataValidation():
+        self.CURRENT_BAR = ''
+
+        self.data_validation = self.dataValidation()
+
+        if self.data_validation:
             self.logger.info('Data validation passed')
         else:
-            self.logger.error('Data validation failed')
+            self.logger.error('Data validation failed, dropping data list')
             self.data_list = []
 
         self.logger.info(f'Full data list: {self.data_list}')
 
-        self.reqRealTimeBars(self.req_it, self.contract, self.live_info['barSizeSetting'], 
-                    self.live_info['whatToShow'], True, [])
+        #TEMP
+        self.realtimeBar(self.req_it, 0,0,0,0,0,0,0,0)
+
+        # self.reqRealTimeBars(self.req_it, self.contract, self.live_info['barSizeSetting'], 
+        #             self.live_info['whatToShow'], True, [])
         
     
     def dataValidation(self) -> bool:
-        dates = [datetime.strptime(d[self.DATE_COLUMN], self.DATE_FORMAT) for d in self.data_list]
+        dates = [datetime.datetime.fromtimestamp(int(d[self.DATE_COLUMN])) for d in self.data_list]
 
         # Determine the time increment in seconds
-        time_increment = int(self.live_info['barSizeSetting'])
+        self.time_increment = int(self.live_info['barSizeSetting'])
 
-        # Calculate the expected number of entries
+        # Calculate the expected number of entries. Only going to work for seconds
         start_date = dates[0]
-        end_date = dates[-1]
-        expected_count = int((end_date - start_date).total_seconds() / time_increment) + 1
+        self.end_date = dates[-1]
+        expected_count = int((self.end_date - start_date).total_seconds() / self.time_increment) + 1
 
         # Check if the actual count matches the expected count
         if len(dates) != expected_count:
@@ -135,7 +146,7 @@ class LiveData(EWrapper, EClient):
         for date in dates:
             if date != current_date:
                 return False
-            current_date += timedelta(seconds=time_increment)
+            current_date += timedelta(seconds=self.time_increment)
 
         return True
             
@@ -143,40 +154,68 @@ class LiveData(EWrapper, EClient):
     def reformatTime(self, time: int) -> str:
         dt_utc = datetime.datetime.fromtimestamp(time, pytz.utc)
         dt_eastern = dt_utc.astimezone(pytz.timezone(self.TIMEZONE))
-        formatted_date = dt_eastern.strftime(f'%Y%m%d %H:%M:%S {self.TIMEZONE}')
+        formatted_date = dt_eastern.strftime(f'{self.VALID_FORMAT} {self.TIMEZONE}')
         
         return formatted_date
+    
+
+    def connectDates(self, time_string: str) -> bool:
+        time = datetime.datetime.strptime(time_string[:self.VALID_POS], self.VALID_FORMAT)
+        connect_time = time - timedelta(seconds=self.time_increment)
+
+        if connect_time == self.end_date:
+            self.logger.info('Final historical bar increments to real time data, transferring to real time stream')
+            return True
+        elif connect_time > self.end_date:
+            self.logger.info('Gap between historical data end time exists, dropping data')
+            self.data_list = []
+            return True
+        else:
+            self.logger.info('Real time data overlaps with historical end time, waiting for new data')
+            return False
 
     
     # Receive live data
     def realtimeBar(self, reqId, time, open_, high, low, close, volume, wap, count) -> None:
 
+        from decimal import Decimal
+        
+        time = 1717185595
+        open_ = 165.47
+        high = 165.55
+        low = 165.45
+        close = 165.49
+        volume = Decimal('24012')
+        wap = 165.47
+        count = Decimal('165.4974508579044')
+        
         #TODO:
-        # Check if historical data is complete 
-        # Wait until a new date is being received, if there's overlap in data received
-        # If there's a gap, discard the historical data
-        # Check by seeing if the last current date is 5s diff with the received time
-        # Do above in a new function
-        # If legit, truncate to only required columns
-        # add to date list and send to queue
+        # Truncate to only required columns?
         # Log
 
+        time_string = self.reformatTime(time)
+
+        new_row = {self.bar_columns['bar_date']: time_string, 
+                    self.bar_columns['bar_open']: open_, 
+                    self.bar_columns['bar_high']: high, 
+                    self.bar_columns['bar_low']: low, 
+                    self.bar_columns['bar_close']: close, 
+                    self.bar_columns['bar_volume']: volume, 
+                    self.bar_columns['bar_wap']: wap, 
+                    self.bar_columns['bar_barCount']: count}
+
         if not self.CURRENT_BAR:
-            self.CURRENT_BAR = time
+            process = self.connectDates(time_string)
+            if process:
+                self.data_list.append(new_row)
+                self.queue.put(new_row)
+                self.CURRENT_BAR = time
 
         elif self.CURRENT_BAR != time:
-            new_row = {self.bar_columns['bar_date']: self.reformatTime(time), 
-                       self.bar_columns['bar_open']: open_, 
-                       self.bar_columns['bar_high']: high, 
-                       self.bar_columns['bar_low']: low, 
-                       self.bar_columns['bar_close']: close, 
-                       self.bar_columns['bar_volume']: volume, 
-                       self.bar_columns['bar_wap']: wap, 
-                       self.bar_columns['bar_barCount']: count}
-            
+            self.queue.put(new_row)
+
             self.CURRENT_BAR = time
 
-            #TODO: Do something with the data
             self.logger.info(f'New row data: {new_row}')
 
 
