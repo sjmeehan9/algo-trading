@@ -15,11 +15,11 @@ class Trading:
     def start(self) -> None:
         self.logger.info('Algo trading session started')
 
-        # data_stream = StreamFaker(self.config, self.pipeline)
+        data_stream = StreamFaker(self.config, self.pipeline)
         
-        data_stream = LiveData(self.config, self.pipeline)
-        data_stream.connect(self.config['ip_address'], self.config['port'], 0)
-        Timer(data_stream.timer, data_stream.stop).start()
+        # data_stream = LiveData(self.config, self.pipeline)
+        # data_stream.connect(self.config['ip_address'], self.config['port'], 0)
+        # Timer(data_stream.timer, data_stream.stop).start()
         
         data_stream.run()
 

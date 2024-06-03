@@ -17,10 +17,7 @@ class LiveData(EWrapper, EClient):
     CURRENT_BAR = ''
     BASE_SECONDS = 20
     INIT_REQUEST_ID = 1000
-    TIMEZONE = 'US/Eastern'
     DATE_COLUMN = 'date'
-    VALID_FORMAT = '%Y%m%d %H:%M:%S'
-    VALID_POS = -11
 
     def __init__(self, config: dict, pipeline: dict):
         EClient.__init__(self, self)
@@ -89,7 +86,7 @@ class LiveData(EWrapper, EClient):
             self.CURRENT_BAR = bar.date
 
         elif self.CURRENT_BAR != bar.date:
-            new_row = {self.historical_columns['bar_date']: bar.date, 
+            new_row = {self.historical_columns['bar_date']: int(bar.date), 
                        self.historical_columns['bar_open']: bar.open, 
                        self.historical_columns['bar_high']: bar.high, 
                        self.historical_columns['bar_low']: bar.low, 
@@ -117,25 +114,19 @@ class LiveData(EWrapper, EClient):
             self.logger.error('Data validation failed, dropping data list')
             self.data_list = []
 
-        self.logger.info(f'Full data list: {self.data_list}')
-
-        #TEMP
-        self.realtimeBar(self.req_it, 0,0,0,0,0,0,0,0)
-
-        # self.reqRealTimeBars(self.req_it, self.contract, self.live_info['barSizeSetting'], 
-        #             self.live_info['whatToShow'], True, [])
+        self.reqRealTimeBars(self.req_it, self.contract, self.live_info['barSizeSetting'], 
+                    self.live_info['whatToShow'], True, [])
         
     
     def dataValidation(self) -> bool:
-        dates = [datetime.datetime.fromtimestamp(int(d[self.DATE_COLUMN])) for d in self.data_list]
+        dates = [int(d[self.DATE_COLUMN]) for d in self.data_list]
 
-        # Determine the time increment in seconds
         self.time_increment = int(self.live_info['barSizeSetting'])
 
         # Calculate the expected number of entries. Only going to work for seconds
         start_date = dates[0]
         self.end_date = dates[-1]
-        expected_count = int((self.end_date - start_date).total_seconds() / self.time_increment) + 1
+        expected_count = int((self.end_date - start_date) / self.time_increment) + 1
 
         # Check if the actual count matches the expected count
         if len(dates) != expected_count:
@@ -146,22 +137,13 @@ class LiveData(EWrapper, EClient):
         for date in dates:
             if date != current_date:
                 return False
-            current_date += timedelta(seconds=self.time_increment)
+            current_date += self.time_increment
 
         return True
-            
-
-    def reformatTime(self, time: int) -> str:
-        dt_utc = datetime.datetime.fromtimestamp(time, pytz.utc)
-        dt_eastern = dt_utc.astimezone(pytz.timezone(self.TIMEZONE))
-        formatted_date = dt_eastern.strftime(f'{self.VALID_FORMAT} {self.TIMEZONE}')
-        
-        return formatted_date
     
 
-    def connectDates(self, time_string: str) -> bool:
-        time = datetime.datetime.strptime(time_string[:self.VALID_POS], self.VALID_FORMAT)
-        connect_time = time - timedelta(seconds=self.time_increment)
+    def connectDates(self, time: int) -> bool:
+        connect_time = time - self.time_increment
 
         if connect_time == self.end_date:
             self.logger.info('Final historical bar increments to real time data, transferring to real time stream')
@@ -178,24 +160,7 @@ class LiveData(EWrapper, EClient):
     # Receive live data
     def realtimeBar(self, reqId, time, open_, high, low, close, volume, wap, count) -> None:
 
-        from decimal import Decimal
-        
-        time = 1717185595
-        open_ = 165.47
-        high = 165.55
-        low = 165.45
-        close = 165.49
-        volume = Decimal('24012')
-        wap = 165.47
-        count = Decimal('165.4974508579044')
-        
-        #TODO:
-        # Truncate to only required columns?
-        # Log
-
-        time_string = self.reformatTime(time)
-
-        new_row = {self.bar_columns['bar_date']: time_string, 
+        new_row = {self.bar_columns['bar_date']: time, 
                     self.bar_columns['bar_open']: open_, 
                     self.bar_columns['bar_high']: high, 
                     self.bar_columns['bar_low']: low, 
@@ -205,18 +170,16 @@ class LiveData(EWrapper, EClient):
                     self.bar_columns['bar_barCount']: count}
 
         if not self.CURRENT_BAR:
-            process = self.connectDates(time_string)
+            process = self.connectDates(time)
             if process:
                 self.data_list.append(new_row)
-                self.queue.put(new_row)
+                self.queue.put(self.data_list)
                 self.CURRENT_BAR = time
 
         elif self.CURRENT_BAR != time:
             self.queue.put(new_row)
 
             self.CURRENT_BAR = time
-
-            self.logger.info(f'New row data: {new_row}')
 
 
     def start(self) -> None:       

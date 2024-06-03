@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 import logging
 import os
 import pandas as pd
@@ -10,6 +11,7 @@ class StreamFaker:
     END_DATEPART = -8
     TIMEZONE = 'US/Eastern'
     DATE_COLUMN = 'date'
+    DECIMAL_COLUMNS = ['volume', 'wap']
     VALID_FORMAT = '%Y%m%d %H:%M:%S'
     VALID_POS = -11
 
@@ -30,12 +32,12 @@ class StreamFaker:
 
         date_text = [f[:self.START_DATEPART][self.END_DATEPART:] for f in os.listdir(pipeline_data_path) if os.path.isfile(os.path.join(pipeline_data_path, f)) and f.endswith('.csv')]
 
-        date_list = []
         for date_str in date_text:
             try:
                 # Try to convert the string to a date object
                 date_obj = datetime.strptime(date_str, '%Y%m%d')
-                date_list.append(date_obj)
+                file_date = date_obj
+                break
             except ValueError:
                 # If conversion fails, skip this element
                 self.logger.error('No date string found in filename')
@@ -45,18 +47,12 @@ class StreamFaker:
 
         contract_info = self.pipeline['pipeline']['contract_info']
 
-        self.final_dataframe = pd.DataFrame()
-
-        self.master_date_list = date_list.copy()
-
-        date = date_list[0]
-
         filename = '{}_{}_{}{:02d}{:02d}.csv'.format(
             contract_info['symbol'],
             contract_info['primaryExchange'],
-            date.year,
-            date.month,
-            date.day
+            file_date.year,
+            file_date.month,
+            file_date.day
         )
 
         file_path = os.path.join(pipeline_data_path, filename)
@@ -64,50 +60,62 @@ class StreamFaker:
         if os.path.exists(file_path):
             self.logger.info(f'Reading: {filename}')
         else:
-            self.master_date_list.remove(date)
             self.logger.info(f'Skipping: {filename} (file not found or not a CSV file)')
         
         try:
             # Read the current CSV file into a DataFrame
-            current_df = pd.read_csv(file_path)
+            self.final_dataframe = pd.read_csv(file_path)
 
-            rows_to_drop = int(len(current_df) * file_trim / 2)
+            rows_to_drop = int(len(self.final_dataframe) * file_trim / 2)
 
-            current_df = current_df.iloc[rows_to_drop:-rows_to_drop]
-            
-            # Append the current DataFrame to the final DataFrame
-            self.final_dataframe = pd.concat([self.final_dataframe, current_df], ignore_index=True)
+            self.final_dataframe = self.final_dataframe.iloc[rows_to_drop:-rows_to_drop]
 
         except Exception as e:
             self.logger.info(f'Error reading {filename}: {e}')
             raise e
 
-        self.episode_length = len(current_df) - self.pipeline['pipeline']['model_data_config']['past_events']
+        self.episode_length = len(self.final_dataframe) - self.pipeline['pipeline']['model_data_config']['past_events']
         
         return None
+    
+
+    def process_time(self, dt_str) -> int:
+        dt = datetime.strptime(dt_str[:self.VALID_POS], self.VALID_FORMAT)
+        local_dt = pytz.timezone(self.TIMEZONE).localize(dt)
+        epoch_time = local_dt.timestamp()
+        
+        return epoch_time
+    
+
+    def process_data(self, row: pd.Series) -> dict:
+        bar = row.to_dict()
+
+        bar[self.DATE_COLUMN] = int(bar[self.DATE_COLUMN])
+
+        if self.DECIMAL_COLUMNS:
+            for col in self.DECIMAL_COLUMNS:
+                try:
+                    col_mod = str(int(bar[col]))
+                    bar[col] = Decimal(col_mod)
+                except:
+                    pass
+
+        return bar
 
 
     def send_data(self) -> None:
         # Process DataFrame
-        self.final_dataframe[self.DATE_COLUMN] = self.final_dataframe[self.DATE_COLUMN].apply(self.process_data)
+        self.final_dataframe[self.DATE_COLUMN] = self.final_dataframe[self.DATE_COLUMN].apply(self.process_time)
 
         # Iterate over the final DataFrame
         for index, row in self.final_dataframe.iterrows():
             self.logger.info(f'Sending row: {index}')
 
-            bar = row.to_dict()
+            bar = self.process_data(row)
 
             self.queue.put(bar)
 
         return None
-    
-
-    def process_data(self, dt_str) -> int:
-        dt = datetime.strptime(dt_str[:self.VALID_POS], self.VALID_FORMAT)
-        local_dt = pytz.timezone(self.TIMEZONE).localize(dt)
-        epoch_time = int(local_dt.timestamp())
-        
-        return epoch_time
     
     
     def run(self) -> None:

@@ -1,4 +1,5 @@
 import logging
+from typing import Union
 
 class StreamQueue:
     def __init__(self, config: dict, pipeline: dict):
@@ -8,7 +9,7 @@ class StreamQueue:
         self.pipeline = pipeline
 
 
-    def put(self, bar: dict) -> None:
+    def put(self, bar: Union[dict, list]) -> None:
         self.logger.info(f'Putting bar {bar} in queue')
 
         return None
