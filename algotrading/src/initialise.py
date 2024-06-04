@@ -38,7 +38,7 @@ def init_task(config: dict, task_options: list, pipeline: dict) -> None:
         app = TrainML(config, pipeline)
         app.start()
     elif task == 'task3':
-        app = Trading(config, pipeline)
+        app = Trading(config, pipeline, 'real')
         app.start()
     elif task == 'task4':
         app = TrainML(config, pipeline, True)

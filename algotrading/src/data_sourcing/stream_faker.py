@@ -11,7 +11,7 @@ class StreamFaker:
     END_DATEPART = -8
     TIMEZONE = 'US/Eastern'
     DATE_COLUMN = 'date'
-    DECIMAL_COLUMNS = ['volume', 'wap']
+    DECIMAL_COLUMNS = {'volume': 'int', 'wap': 'float'}
     VALID_FORMAT = '%Y%m%d %H:%M:%S'
     VALID_POS = -11
 
@@ -93,27 +93,29 @@ class StreamFaker:
         bar[self.DATE_COLUMN] = int(bar[self.DATE_COLUMN])
 
         if self.DECIMAL_COLUMNS:
-            for col in self.DECIMAL_COLUMNS:
-                try:
-                    col_mod = str(int(bar[col]))
-                    bar[col] = Decimal(col_mod)
-                except:
-                    pass
+            for col, dtype in self.DECIMAL_COLUMNS.items():
+                if dtype == 'int':
+                    col_mod = int(bar[col])
+                elif dtype == 'float':
+                    col_mod = float(bar[col])
+                else:
+                    col_mod = bar[col]
+
+                col_mod = str(col_mod)
+
+                bar[col] = Decimal(col_mod)
 
         return bar
 
 
     def send_data(self) -> None:
-        # Process DataFrame
         self.final_dataframe[self.DATE_COLUMN] = self.final_dataframe[self.DATE_COLUMN].apply(self.process_time)
 
-        # Iterate over the final DataFrame
-        for index, row in self.final_dataframe.iterrows():
+        processed_data = self.final_dataframe.apply(self.process_data, axis=1)
+
+        for index, row in processed_data.items():
             self.logger.info(f'Sending row: {index}')
-
-            bar = self.process_data(row)
-
-            self.queue.put(bar)
+            self.queue.put(row)
 
         return None
     
