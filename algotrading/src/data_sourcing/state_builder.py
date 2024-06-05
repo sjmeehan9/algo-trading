@@ -19,8 +19,9 @@ class StateBuilder:
         self.initialise_counters()
 
 
-    def live_data(self):
-        pass
+    def live_data(self, queue: pd.DataFrame) -> None:
+        self.logger.info('Live data received')
+        return None
 
 
     def read_data(self, evaluate: bool) -> None:

@@ -9,7 +9,6 @@ from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
 from ..load_config import config_loader
 
-    
 class PastData(EWrapper, EClient):
     CONFIG_FILENAME = 'historical_data.yml'
     CURRENT_BAR = ''
@@ -17,7 +16,7 @@ class PastData(EWrapper, EClient):
     INIT_REQUEST_ID = 1000
     SLEEP_DURATION = 1
     LOAD_DURATION = 10
-    TIMEZONE = 'US/Eastern'
+    DATE_STR_POS = 8
     DATE_COLUMN = 'date'
 
     def __init__(self, config: dict, pipeline: dict):
@@ -58,6 +57,8 @@ class PastData(EWrapper, EClient):
 
         self.bar_columns = self.script_config['bar_columns']
 
+        self.timezone = self.pipeline['pipeline']['timezone']
+
         self.historical_info = self.pipeline['pipeline']['historical_data_config']
         self.data_df = pd.DataFrame(columns=self.historical_info['columns'])
         self.data_list = []
@@ -91,8 +92,8 @@ class PastData(EWrapper, EClient):
     
 
     def checkDataframe(self, date_requested: str) -> bool:
-        dt_min = self.data_df[self.DATE_COLUMN].min()[:8]
-        dt_max = self.data_df[self.DATE_COLUMN].max()[:8]
+        dt_min = self.data_df[self.DATE_COLUMN].min()[:self.DATE_STR_POS]
+        dt_max = self.data_df[self.DATE_COLUMN].max()[:self.DATE_STR_POS]
         row_check = (self.step_size['durationNum'] / self.step_size['barSize']) * self.step_size['loops_required']
 
         if dt_min == dt_max and self.data_df.shape[0] == row_check and dt_min == date_requested:
@@ -120,7 +121,7 @@ class PastData(EWrapper, EClient):
 
             temp_time_str = '{}{:02d}{:02d} {:02d}:{:02d}:{:02d} {}'.format(
                 temp_time.year, temp_time.month, temp_time.day, temp_time.hour, temp_time.minute, 
-                temp_time.second, self.TIMEZONE)
+                temp_time.second, self.timezone)
 
             self.reqHistoricalData(self.req_it, self.contract, temp_time_str, self.step_size['durationString'], 
                 self.historical_info['barSizeSetting'], self.historical_info['whatToShow'], 1, 1, False, [])
@@ -156,7 +157,7 @@ class PastData(EWrapper, EClient):
 
         # After reqId cycles through the loops required, save data to csv
         iter_num = (reqId - self.INIT_REQUEST_ID + 1) % self.step_size['loops_required']
-        date_requested = end[:8]
+        date_requested = end[:self.DATE_STR_POS]
 
         if iter_num == 0:
             self.data_df = pd.DataFrame(self.data_list)
