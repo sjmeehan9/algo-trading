@@ -9,9 +9,7 @@ from .stream_queue import StreamQueue
 class StreamFaker:
     START_DATEPART = -4
     END_DATEPART = -8
-    TIMEZONE = 'US/Eastern'
     DATE_COLUMN = 'date'
-    DECIMAL_COLUMNS = {'volume': 'int', 'wap': 'float'}
     VALID_FORMAT = '%Y%m%d %H:%M:%S'
     VALID_POS = -11
 
@@ -20,6 +18,9 @@ class StreamFaker:
 
         self.config = config
         self.pipeline = pipeline
+
+        self.decimal_columns = self.pipeline['pipeline']['live_data_config']['fakerColumnTypes']
+        self.timezone = self.pipeline['pipeline']['timezone']
 
         self.queue = StreamQueue(self.config, self.pipeline)
 
@@ -81,7 +82,7 @@ class StreamFaker:
 
     def process_time(self, dt_str) -> int:
         dt = datetime.strptime(dt_str[:self.VALID_POS], self.VALID_FORMAT)
-        local_dt = pytz.timezone(self.TIMEZONE).localize(dt)
+        local_dt = pytz.timezone(self.timezone).localize(dt)
         epoch_time = local_dt.timestamp()
         
         return epoch_time
@@ -92,8 +93,8 @@ class StreamFaker:
 
         bar[self.DATE_COLUMN] = int(bar[self.DATE_COLUMN])
 
-        if self.DECIMAL_COLUMNS:
-            for col, dtype in self.DECIMAL_COLUMNS.items():
+        if self.decimal_columns:
+            for col, dtype in self.decimal_columns.items():
                 if dtype == 'int':
                     col_mod = int(bar[col])
                 elif dtype == 'float':

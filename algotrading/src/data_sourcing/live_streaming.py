@@ -1,16 +1,12 @@
-import datetime
-from datetime import timedelta
 import logging
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
 import os
 from pathlib import Path
-import pytz
 from ..load_config import config_loader
 from .stream_queue import StreamQueue
 
-    
 class LiveData(EWrapper, EClient):
     CONFIG_FILENAME = 'live_streaming.yml'
     HISTORICAL_CONFIG = 'historical_data.yml'

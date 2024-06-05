@@ -13,16 +13,13 @@ task_selection: task3
 
 # Settings for task 1
 date_list:
-  - 2023-01-21
-  - 2023-01-22
-  - 2023-01-23
-  - 2023-01-24
-  - 2023-01-25
-  - 2023-01-26
-  - 2023-01-27
-  - 2023-01-28
-  - 2023-01-29
-  - 2023-01-30
+  - 2024-04-24
+  - 2024-04-25
+  - 2024-04-26
+  - 2024-04-27
+  - 2024-04-28
+  - 2024-04-29
+  - 2024-04-30
 
 # Settings for task 2
 data_mode: historical
@@ -47,6 +44,9 @@ training_date_list:
   - 2023-03-29
   - 2023-03-30
   - 2023-03-31
+
+# Settings for task 3
+stream_data: fake
 
 # Settings for task 4
 backtest_model: dqn_0002
