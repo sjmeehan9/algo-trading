@@ -48,7 +48,8 @@ class StreamQueue:
             self.queue = self.queue.tail(self.buffer_size)
 
         if len(self.queue) == self.buffer_size:
-            self.route_function(self.queue.reset_index(drop=True))
+            self.queue = self.queue.reset_index(drop=True)
+            self.route_function(self.queue)
 
         return None
 

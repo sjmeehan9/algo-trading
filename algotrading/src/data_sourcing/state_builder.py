@@ -20,7 +20,7 @@ class StateBuilder:
 
 
     def live_data(self, queue: pd.DataFrame) -> None:
-        self.logger.info('Live data received')
+        self.logger.info(f'Live data received')
         return None
 
 

@@ -43,12 +43,12 @@
         },
         "model": {
             "pipeline_type": "rl",
-            "model_type": "dqn",
+            "model_type": "ppo",
             "model_policy": "MultiInputPolicy",
             "model_reward": "profit_seeker",
             "file_extension": ".zip",
             "model_config": {
-                "buffer_size": 150000,
+                "n_steps": 2048,
                 "batch_size": 64,
                 "gamma": 0.99,
                 "verbose": 1
