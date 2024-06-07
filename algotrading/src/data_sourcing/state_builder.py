@@ -4,6 +4,7 @@ import numpy as np
 import os
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+from ..reward_functions.profit_seeker import ProfitSeeker
 
 class StateBuilder:
     START_DATEPART = -4
@@ -18,10 +19,7 @@ class StateBuilder:
 
         self.initialise_counters()
 
-
-    def live_data(self, queue: pd.DataFrame) -> None:
-        self.logger.info(f'Live data received')
-        return None
+        self.live_data_function = self.initialise_live_data()
 
 
     def read_data(self, evaluate: bool) -> None:
@@ -236,4 +234,43 @@ class StateBuilder:
     def update_episode_counter(self) -> None:
         self.state_counters['window'] += 1
         self.state_counters['episode'] += 1
+        return None
+
+    
+    def initialise_live_data(self) -> object:
+        # Init reward for use in live data tasks
+        reward_name = self.pipeline['pipeline']['model']['model_reward']
+        if reward_name == 'profit_seeker':
+            self.reward = ProfitSeeker(self.config, self.pipeline)
+        else:
+            self.logger.error('reward_name not recognised')
+            return None
+
+        # Route to the correct function based on the task selection
+        if self.config['task_selection'] == 'task2':
+            route = self.live_step
+        elif self.config['task_selection'] == 'task3':
+            route = self.trading_step
+        else:
+            self.logger.error('Live data usage not supported')
+            route = None
+        
+        return route
+
+
+    def live_data(self, queue: pd.DataFrame) -> None:
+        self.logger.info(f'Live data received by StateBuilder')
+
+        self.live_data_function()
+
+        return None
+    
+
+    def trading_step(self) -> None:
+        self.logger.info(f'Trading step')
+        return None
+
+
+    def live_step(self) -> None:
+        self.logger.info(f'Live step')
         return None

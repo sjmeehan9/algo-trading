@@ -56,9 +56,8 @@ class TrainRL:
             self.logger.info('Data read from historical files')
             return None
         elif self.config['data_mode'] == 'live':
-            # Placeholder for live data stream setup
-            # For live data, pass the data through to StateBuilder object
-            return None
+            self.state_builder.live_data_function()
+            raise NotImplementedError('Live data is not yet supported')
         else:
             self.logger.error('data_mode not recognised')
             return None
@@ -76,8 +75,8 @@ class TrainRL:
         else:
             self.logger.error('env_name not recognised')
             return None
-        
-    
+   
+
     def reward_factory(self, reward_name: str) -> object:
         if reward_name == 'profit_seeker':
             return ProfitSeeker(self.config, self.pipeline)
@@ -216,7 +215,7 @@ class TrainRL:
         # Setup the data feed
         self.data_setup()
 
-        # Instanciate reward function object
+        # Instanciate static reward function object
         self.reward = self.reward_factory(self.reward_name)
 
         # Contruct initial state dictionary
