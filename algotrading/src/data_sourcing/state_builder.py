@@ -4,7 +4,7 @@ import numpy as np
 import os
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-from ..reward_functions.profit_seeker import ProfitSeeker
+from ..reward_functions.reward import reward_factory
 
 class StateBuilder:
     START_DATEPART = -4
@@ -109,20 +109,34 @@ class StateBuilder:
         }
 
         return None
+    
+
+    def task_state(self) -> None:
+        if self.config['task_selection'] == 'task3':
+            self.file_offset = 0
+            self.final_dataframe = self.queue
+        elif self.config['task_selection'] == 'task2' and self.config['data_mode'] == 'live':
+            self.file_offset = 0
+            self.final_dataframe = self.queue
+        elif self.config['task_selection'] == 'task2' and self.config['data_mode'] == 'historical':
+            self.terminated = False
+            self.timed_out = False
+            self.file_offset = self.state_counters['window'] * (self.episode_length + self.window_end)
+        else:
+            self.logger.error('Data usage not supported')
+            raise NotImplementedError('Data usage not supported')
+
+        return None
 
 
     def initialise_state(self, reward: object) -> None:
-        self.terminated = False
-
-        self.timed_out = False
-
         self.reward = reward
 
         self.reward_variables = self.reward.initial_reward_variables()
 
         self.window_end = self.pipeline['pipeline']['model_data_config']['past_events']
 
-        self.file_offset = self.state_counters['window'] * (self.episode_length + self.window_end)
+        self.task_state()
 
         self.file_step = self.state_counters['step'] + self.file_offset
 
@@ -238,13 +252,12 @@ class StateBuilder:
 
     
     def initialise_live_data(self) -> object:
+        # Flag for completed initialisation
+        self.initialised = False
+
         # Init reward for use in live data tasks
         reward_name = self.pipeline['pipeline']['model']['model_reward']
-        if reward_name == 'profit_seeker':
-            self.reward = ProfitSeeker(self.config, self.pipeline)
-        else:
-            self.logger.error('reward_name not recognised')
-            return None
+        self.reward_object = reward_factory(reward_name, self.config, self.pipeline)
 
         # Route to the correct function based on the task selection
         if self.config['task_selection'] == 'task2':
@@ -260,6 +273,11 @@ class StateBuilder:
 
     def live_data(self, queue: pd.DataFrame) -> None:
         self.logger.info(f'Live data received by StateBuilder')
+        self.queue = queue
+
+        if not self.initialised:
+            self.initialise_state(self.reward_object)
+            self.initialised = True
 
         self.live_data_function()
 

@@ -38,8 +38,7 @@
                 "count": [false, true]
             },
             "file_trim": 0.038,
-            "past_events": 60,
-            "queue_buffer": 90
+            "past_events": 60
         },
         "model": {
             "pipeline_type": "rl",

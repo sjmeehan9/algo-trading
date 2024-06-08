@@ -5,7 +5,7 @@ from stable_baselines3 import PPO, DQN
 from stable_baselines3.common.env_checker import check_env
 from ..data_sourcing.state_builder import StateBuilder
 from ..envs.trading_env import TradingEnv
-from ..reward_functions.profit_seeker import ProfitSeeker
+from ..reward_functions.reward import reward_factory
 
 class TrainRL:
     REWARD = 'reward'
@@ -74,14 +74,6 @@ class TrainRL:
                 raise e
         else:
             self.logger.error('env_name not recognised')
-            return None
-   
-
-    def reward_factory(self, reward_name: str) -> object:
-        if reward_name == 'profit_seeker':
-            return ProfitSeeker(self.config, self.pipeline)
-        else:
-            self.logger.error('reward_name not recognised')
             return None
         
     
@@ -215,8 +207,8 @@ class TrainRL:
         # Setup the data feed
         self.data_setup()
 
-        # Instanciate static reward function object
-        self.reward = self.reward_factory(self.reward_name)
+        # Instanciate reward function object
+        self.reward = reward_factory(self.reward_name, self.config, self.pipeline)
 
         # Contruct initial state dictionary
         self.state_builder.initialise_state(self.reward)
