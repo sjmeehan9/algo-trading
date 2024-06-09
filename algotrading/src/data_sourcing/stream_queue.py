@@ -66,4 +66,5 @@ class StreamQueue:
             self.logger.error('Pipeline type not supported')
             route = None
         
+        self.logger.info(f'Route function defined')
         return route

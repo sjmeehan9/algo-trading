@@ -5,7 +5,7 @@ from .data_sourcing.save_historical import PastData
 from .data_sourcing.live_streaming import LiveData
 from .models.train_ml import TrainML
 from .load_config import pipeline_loader
-from .trading.trading import Trading
+from .trading.trading_data import TradingStream
 
 # Init task functions
 def init_task(config: dict, task_options: list, pipeline: dict) -> None:
@@ -38,7 +38,7 @@ def init_task(config: dict, task_options: list, pipeline: dict) -> None:
         app = TrainML(config, pipeline)
         app.start()
     elif task == 'task3':
-        app = Trading(config, pipeline, config['stream_data'])
+        app = TradingStream(config, pipeline, config['stream_data'])
         app.start()
     elif task == 'task4':
         app = TrainML(config, pipeline, True)

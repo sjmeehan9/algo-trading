@@ -4,6 +4,7 @@ import numpy as np
 import os
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+from ..trading.trading import Trading
 from ..reward_functions.reward import reward_factory
 
 class StateBuilder:
@@ -257,17 +258,19 @@ class StateBuilder:
 
         # Init reward for use in live data tasks
         reward_name = self.pipeline['pipeline']['model']['model_reward']
-        self.reward_object = reward_factory(reward_name, self.config, self.pipeline)
+        self.reward = reward_factory(reward_name, self.config, self.pipeline)
 
         # Route to the correct function based on the task selection
         if self.config['task_selection'] == 'task2':
             route = self.live_step
         elif self.config['task_selection'] == 'task3':
+            self.trading = Trading(self.config, self.pipeline)
             route = self.trading_step
         else:
             self.logger.error('Live data usage not supported')
             route = None
         
+        self.logger.info(f'Initialised live data function')
         return route
 
 
@@ -276,7 +279,7 @@ class StateBuilder:
         self.queue = queue
 
         if not self.initialised:
-            self.initialise_state(self.reward_object)
+            self.initialise_state(self.reward)
             self.initialised = True
 
         self.live_data_function()
@@ -285,10 +288,11 @@ class StateBuilder:
     
 
     def trading_step(self) -> None:
-        self.logger.info(f'Trading step')
+        # Sent state to trading_algorithm
+        self.trading.trading_algorithm(self.state)
         return None
 
 
     def live_step(self) -> None:
-        self.logger.info(f'Live step')
+        self.logger.info(f'Live step not yet implemented')
         return None
