@@ -4,6 +4,7 @@ import numpy as np
 import os
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+from threading import Timer
 from ..trading.trading import Trading
 from ..reward_functions.reward import reward_factory
 
@@ -264,7 +265,12 @@ class StateBuilder:
         if self.config['task_selection'] == 'task2':
             route = self.live_step
         elif self.config['task_selection'] == 'task3':
+            client_id = self.pipeline['pipeline']['client_id']
             self.trading = Trading(self.config, self.pipeline)
+            self.trading.connect(self.config['ip_address'], self.config['port'], client_id['trading'])
+            Timer(self.trading.timer, self.trading.stop).start()
+            self.trading.run()
+
             route = self.trading_step
         else:
             self.logger.error('Live data usage not supported')

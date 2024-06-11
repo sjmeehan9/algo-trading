@@ -1,3 +1,4 @@
+import datetime
 import logging
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
@@ -156,6 +157,9 @@ class LiveData(EWrapper, EClient):
     # Receive live data
     def realtimeBar(self, reqId, time, open_, high, low, close, volume, wap, count) -> None:
 
+        # Temporary timing of trading data flow
+        self.logger.info('Start of trade data flow: %s', datetime.datetime.now())
+
         new_row = {self.bar_columns['bar_date']: time, 
                     self.bar_columns['bar_open']: open_, 
                     self.bar_columns['bar_high']: high, 
@@ -178,9 +182,8 @@ class LiveData(EWrapper, EClient):
             self.CURRENT_BAR = time
 
 
-    def start(self) -> None:       
-
-        logging.getLogger().setLevel(logging.INFO)
+    def start(self) -> None:
+        
         self.req_it = self.INIT_REQUEST_ID
 
         # Request live realTimeBars data

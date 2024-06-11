@@ -186,7 +186,6 @@ class PastData(EWrapper, EClient):
 
     def start(self) -> None:       
 
-        logging.getLogger().setLevel(logging.INFO)
         self.req_it = self.INIT_REQUEST_ID
 
         # Request historical data for first date in the list

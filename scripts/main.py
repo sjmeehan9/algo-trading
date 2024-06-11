@@ -34,7 +34,8 @@ def main(filename: str) -> None:
 
     # Setup logger
     setup_logger(config['log_path'])
-    logger = logging.getLogger(__name__)    
+    logger = logging.getLogger(__name__)   
+    logger.setLevel(logging.INFO)
     logger.info('Starting application, time is %s', datetime.datetime.now())
 
     # Init task

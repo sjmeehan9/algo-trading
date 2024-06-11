@@ -11,11 +11,13 @@ class TradingStream:
         self.pipeline = pipeline
         self.mode = mode
 
+        self.client_id = pipeline['pipeline']['client_id']
+
 
     def streamer(self) -> None:
         if self.mode == 'real':
             data_stream = LiveData(self.config, self.pipeline)
-            data_stream.connect(self.config['ip_address'], self.config['port'], 0)
+            data_stream.connect(self.config['ip_address'], self.config['port'], self.client_id['live'])
             Timer(data_stream.timer, data_stream.stop).start()
             return data_stream
         elif self.mode == 'fake':

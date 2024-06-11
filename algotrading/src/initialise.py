@@ -28,10 +28,12 @@ def init_task(config: dict, task_options: list, pipeline: dict) -> None:
     if not os.path.exists(config['data_path']):
         os.makedirs(config['data_path'])
 
+    client_id = pipeline['pipeline']['client_id']
+
     # Run the selected task
     if task == 'task1':
         app = PastData(config, pipeline)
-        app.connect(config['ip_address'], config['port'], 0)
+        app.connect(config['ip_address'], config['port'], client_id['historical'])
         Timer(app.timer, app.stop).start()
         app.run()
     elif task == 'task2':
@@ -45,7 +47,7 @@ def init_task(config: dict, task_options: list, pipeline: dict) -> None:
         app.start()
     elif task == 'task5':
         app = LiveData(config, pipeline)
-        app.connect(config['ip_address'], config['port'], 0)
+        app.connect(config['ip_address'], config['port'], client_id['live'])
         Timer(app.timer, app.stop).start()
         app.run()
     else:
