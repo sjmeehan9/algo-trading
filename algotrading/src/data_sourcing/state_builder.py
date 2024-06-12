@@ -266,10 +266,11 @@ class StateBuilder:
             route = self.live_step
         elif self.config['task_selection'] == 'task3':
             client_id = self.pipeline['pipeline']['client_id']
-            self.trading = Trading(self.config, self.pipeline)
-            self.trading.connect(self.config['ip_address'], self.config['port'], client_id['trading'])
-            Timer(self.trading.timer, self.trading.stop).start()
-            self.trading.run()
+            app = Trading(self.config, self.pipeline)
+            app.connect(self.config['ip_address'], self.config['port'], client_id['trading'])
+            Timer(app.timer, app.stop).start()
+
+            self.trading = app
 
             route = self.trading_step
         else:

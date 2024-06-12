@@ -59,6 +59,10 @@ class LiveData(EWrapper, EClient):
         self.logger.info(f'Error: {reqId}, {errorCode}, {errorString}')
 
 
+    def connect(self, ip_address, port, client_id):
+        super().connect(ip_address, port, client_id)
+
+
     def nextValidId(self, orderId: int) -> None:
         super().nextValidId(orderId)
         self.nextValidOrderId = orderId
@@ -191,6 +195,7 @@ class LiveData(EWrapper, EClient):
 
             
     def stop(self) -> None:
+        self.logger.info('LiveData connection closed')
 
         self.cancelRealTimeBars(self.req_it)
         

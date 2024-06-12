@@ -3,9 +3,9 @@
         "filename": "pipeline_0001",
         "description": "Basic RL model for AMD NASDAQ stock",
         "client_id": {
-            "historical": 111,
-            "live": 222,
-            "trading": 333
+            "historical": 0,
+            "live": 1,
+            "trading": 2
         },
         "timezone": "US/Eastern",
         "contract_info": {

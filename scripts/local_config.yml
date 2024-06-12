@@ -34,7 +34,7 @@ training_date_list:
   - 2023-01-09
 
 # Settings for task 3
-stream_data: real
+stream_data: fake
 
 trading_model: ppo_0011
 
