@@ -3,6 +3,8 @@ ip_address: 127.0.0.1
 
 port: 7497
 
+account_number: DU8392034
+
 pipeline: pipeline_0001
 
 log_path: logs/
