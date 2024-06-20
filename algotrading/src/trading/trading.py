@@ -5,6 +5,7 @@ from ibapi.contract import Contract
 from threading import Timer
 from ..models.predict import Predict
 from .order import OrderManager
+from .payload import Payload
 
 class Trading(EWrapper, EClient):
     BASE_SECONDS = 60
@@ -20,6 +21,7 @@ class Trading(EWrapper, EClient):
 
         self.predict = Predict(self.config, self.pipeline)
         self.order = OrderManager(self.config, self.pipeline)
+        self.payload = Payload()
 
         contract_info = self.pipeline['pipeline']['contract_info']
         self.contract = Contract()

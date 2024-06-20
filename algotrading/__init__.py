@@ -13,6 +13,7 @@ from .src.models.train_rl import TrainRL
 from .src.reward_functions.profit_seeker import ProfitSeeker
 from .src.trading.financials import Financials
 from .src.trading.order import OrderManager
+from .src.trading.payload import Payload
 from .src.trading.trading import Trading
 from .src.trading.trading_data import TradingStream
 from .src.utils import write_audit_json, print_task_options, parse_datetime_tz

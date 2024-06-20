@@ -285,16 +285,46 @@ class StateBuilder:
         self.logger.info(f'Live data received by StateBuilder')
         self.queue = queue
 
-        if not self.initialised:
+        if self.initialised:
+            self.live_data_function()
+        else:
             self.initialise_state(self.reward)
             self.initialised = True
-
-        self.live_data_function()
+            #TODO Still send to TA? Or payload only?
 
         return None
     
 
     def trading_step(self) -> None:
+        self.final_dataframe = self.queue
+
+        # Grab the next window of data
+        frame_start = self.file_step
+        frame_end = self.file_step + self.window_end
+        self.state_df = self.final_dataframe.iloc[frame_start:frame_end]
+
+        # Create an empty dataframe
+        temp_dataframe = pd.DataFrame()
+        
+        # If scale_columns list not empty, append to a temp dataframe
+        if self.scale_columns:
+            temp_dataframe = self.state_df[self.scale_columns]
+
+            scaled_data = self.SCALER.fit_transform(temp_dataframe)
+
+            temp_dataframe = pd.DataFrame(scaled_data, columns=self.scale_columns)
+
+        # If unscale_columns list not empty, append to temp dataframe
+        if self.unscaled_columns:
+            unscaled_df = self.state_df[self.unscaled_columns].reset_index(drop=True)
+
+            temp_dataframe = pd.concat([temp_dataframe, unscaled_df], axis=1)
+        
+        # For the custom variables, grab the previous step values from the last step
+        reward_variable_dict = {key: self.state[key][1:] for key, value in self.reward_variables.items()}
+
+        self.terminated = False
+
         # Sent state to trading_algorithm
         self.trading.trading_algorithm(self.state)
         return None
