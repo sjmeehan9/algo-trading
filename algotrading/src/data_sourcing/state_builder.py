@@ -337,7 +337,7 @@ class StateBuilder:
         self.state.update(reward_variable_dict) 
 
         # Sent state to trading_algorithm
-        self.trading.trading_algorithm(self.state)
+        self.trading.tradingAlgorithm(self.state)
 
         return None
 

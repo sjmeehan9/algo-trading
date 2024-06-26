@@ -35,6 +35,7 @@ class Trading(EWrapper, EClient):
         self.contract.primaryExchange = contract_info['primaryExchange']
 
         self.account = self.config['account_number']
+        self.enable_trading = self.config['stream_data'] == 'fake'
 
         self.timer = self.setTimer()
 
@@ -137,7 +138,7 @@ class Trading(EWrapper, EClient):
                 self.payload.active_pos = '{}_FILL'.format(self.payload.temp_action)
         
 
-    def trading_algorithm(self, state: dict) -> None:
+    def tradingAlgorithm(self, state: dict) -> None:
         action, _ = self.predict.get_action(state)
 
         self.payload.action_int = action.item()
@@ -152,7 +153,7 @@ class Trading(EWrapper, EClient):
 
         take_action = self.order.checkAction(self.payload.action_str, self.payload.active_pos)
 
-        if take_action:
+        if take_action and self.enable_trading:
             self.logger.info('Action requested')
             self.executeOrder()
         else:
