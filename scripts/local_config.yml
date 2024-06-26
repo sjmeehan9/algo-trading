@@ -30,6 +30,7 @@ input_model: ppo_0000
 save_to_file: ppo_0000
 
 training_date_list:
+  - 2022-01-03
   - 2023-01-01
   - 2023-01-02
   - 2023-01-03
@@ -38,7 +39,7 @@ training_date_list:
 # Settings for task 3
 stream_data: fake
 
-trading_model: ppo_0011
+trading_model: ppo_0000
 
 # Settings for task 4
 backtest_model: ppo_0011

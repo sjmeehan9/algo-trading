@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import warnings
 from ..trading.financials import Financials
+from ..trading.payload import Payload
 
 class ProfitSeeker(Financials):
     CUSTOM_VARIABLES = {
@@ -20,6 +21,18 @@ class ProfitSeeker(Financials):
 
         self.logger = logging.getLogger(__name__)
 
+        self.config = config
+        self.pipeline = pipeline
+
+        self.reward_step = self.task_factory(self.config['task_selection'])
+
+
+    def task_factory(self, task_selection: str) -> object:
+        if task_selection == 'task3':
+            return self.trading_step
+        else:
+            return self.training_step
+
 
     # Dictionary of custom reward variables set to initial values
     def initial_reward_variables(self) -> dict:
@@ -31,6 +44,58 @@ class ProfitSeeker(Financials):
         self.PRICE_PAID = 0.0
         self.SET_PROFIT = 0.0
         return None
+    
+
+    def trading_step(self, payload: Payload, state_df: pd.DataFrame, reward_variable_dict: dict, terminated: bool) -> dict:
+        if payload.update_reward_vars:
+            action = payload.temp_action_int
+            self.current_position = payload.action_dict[payload.previous_pos]
+            self.strike_price = payload.last_price
+            payload.release_trade = True
+            payload.update_reward_vars = False
+        elif '_' in payload.active_pos:
+            action = 0
+            self.current_position = payload.action_dict[payload.previous_pos]
+            self.strike_price = state_df['close'].iloc[-2]
+        else:
+            action = payload.action_int
+            self.current_position = payload.action_dict[payload.active_pos]
+            self.strike_price = state_df['close'].iloc[-2]
+
+        payload.live_price = state_df['close'].iloc[-1]
+        self.strike_buy = self.strike_price
+        self.strike_sell = self.strike_price
+
+        reward_variable_dict = self.reward_variable_step(action, state_df, reward_variable_dict, terminated)
+
+        return reward_variable_dict
+    
+
+    def training_step(self, action: int, state_df: pd.DataFrame, reward_variable_dict: dict, terminated: bool) -> dict:
+        
+        self.current_position = reward_variable_dict['current_position'][-1]
+
+        self.strike_price = state_df['close'].iloc[-2]
+        self.strike_buy = self.strike_price / self.commision_factor
+        self.strike_sell = self.strike_price * self.commision_factor
+
+        reward_variable_dict = self.reward_variable_step(action, state_df, reward_variable_dict, terminated)
+
+        return reward_variable_dict
+    
+
+    def reward_variable_step(self, action: int, state_df: pd.DataFrame, reward_variable_dict: dict, terminated: bool) -> dict:
+        self.determine_action_type(action, terminated)
+
+        reward_variable_dict = self.current_position_update(action, reward_variable_dict)
+
+        self.current_price_update(state_df)
+
+        reward_variable_dict = self.trade_change_update(reward_variable_dict)
+
+        reward_variable_dict = self.running_profit_update(reward_variable_dict)
+
+        return reward_variable_dict
     
 
     def determine_action_type(self, action: int, terminated: bool) -> None:
@@ -72,22 +137,6 @@ class ProfitSeeker(Financials):
         return None
     
 
-    def reward_variable_step(self, action: int, state: dict, reward_variable_dict: dict, terminated: bool) -> dict:
-        self.current_position = reward_variable_dict['current_position'][-1]
-
-        self.determine_action_type(action, terminated)
-
-        reward_variable_dict = self.current_position_update(action, reward_variable_dict)
-
-        self.current_price_update(state)
-
-        reward_variable_dict = self.trade_change_update(reward_variable_dict)
-
-        reward_variable_dict = self.running_profit_update(reward_variable_dict)
-
-        return reward_variable_dict
-    
-
     def current_position_update(self, action: int, reward_variable_dict: dict) -> dict:
 
         position_dict = {
@@ -109,16 +158,18 @@ class ProfitSeeker(Financials):
         return reward_variable_dict
     
 
-    def current_price_update(self, state_df: pd.DataFrame) -> None:
-        self.strike_price = state_df['close'].iloc[-2]
+    def set_current_prices(self, state_df: pd.DataFrame) -> None:
         self.new_price = state_df['close'].iloc[-1]
-
-        self.strike_buy = self.strike_price / self.commision_factor
-        self.strike_sell = self.strike_price * self.commision_factor
         self.new_buy = self.new_price / self.commision_factor
         self.new_sell = self.new_price * self.commision_factor
         self.price_paid_buy = self.PRICE_PAID / self.commision_factor
         self.price_paid_sell = self.PRICE_PAID * self.commision_factor
+
+        return None
+    
+
+    def current_price_update(self, state_df: pd.DataFrame) -> None:
+        self.set_current_prices(state_df)
 
         price_dict = {
             'hold_nothing': self.PRICE_PAID,

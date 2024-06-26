@@ -235,7 +235,7 @@ class StateBuilder:
             self.timed_out = True
 
         # Call each reward variable function to calculate the new values for the latest time
-        reward_variable_dict = self.reward.reward_variable_step(action, self.state_df, reward_variable_dict, self.terminated)
+        reward_variable_dict = self.reward.reward_step(action, self.state_df, reward_variable_dict, self.terminated)
 
         # store the state dictionary
         self.state = temp_dataframe.to_dict(orient='list')
@@ -243,7 +243,7 @@ class StateBuilder:
         self.state = {key: np.array(value) for key, value in self.state.items()}
 
         self.state.update(reward_variable_dict)
-        
+
         return None
 
 
@@ -265,6 +265,8 @@ class StateBuilder:
         if self.config['task_selection'] == 'task2':
             route = self.live_step
         elif self.config['task_selection'] == 'task3':
+            self.terminated = False
+
             client_id = self.pipeline['pipeline']['client_id']
             app = Trading(self.config, self.pipeline)
             app.connect(self.config['ip_address'], self.config['port'], client_id['trading'])
@@ -290,7 +292,6 @@ class StateBuilder:
         else:
             self.initialise_state(self.reward)
             self.initialised = True
-            #TODO Still send to TA? Or payload only?
 
         return None
     
@@ -323,10 +324,21 @@ class StateBuilder:
         # For the custom variables, grab the previous step values from the last step
         reward_variable_dict = {key: self.state[key][1:] for key, value in self.reward_variables.items()}
 
-        self.terminated = False
+        payload = self.trading.payload
+
+        # Get latest values for the custom reward variables
+        reward_variable_dict = self.reward.reward_step(payload, self.state_df, reward_variable_dict, self.terminated)
+
+        # store the state dictionary
+        self.state = temp_dataframe.to_dict(orient='list')
+
+        self.state = {key: np.array(value) for key, value in self.state.items()}
+
+        self.state.update(reward_variable_dict) 
 
         # Sent state to trading_algorithm
         self.trading.trading_algorithm(self.state)
+
         return None
 
 

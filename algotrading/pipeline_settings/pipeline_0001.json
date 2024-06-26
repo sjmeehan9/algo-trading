@@ -15,6 +15,10 @@
             "currency": "USD",
             "primaryExchange": "NASDAQ"
         },
+        "trading_config": {
+            "order_type": "MKT",
+            "balance_multiplier": 0.9
+        },
         "historical_data_config": {
             "columns": ["date", "open", "high", "low", "close", "volume", "wap", "count"],
             "barSizeSetting": "5 secs",

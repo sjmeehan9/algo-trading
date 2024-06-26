@@ -2,6 +2,7 @@ import logging
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
+import pandas as pd
 from threading import Timer
 from ..models.predict import Predict
 from .order import OrderManager
@@ -10,6 +11,7 @@ from .payload import Payload
 class Trading(EWrapper, EClient):
     BASE_SECONDS = 60
     CURRENT_POS_LIST = []
+    ACTIONS = {0: 'NONE', 1: 'BUY', 2: 'SELL', 'NONE': 0, 'BUY': 1, 'SELL': 2}
 
     def __init__(self, config: dict, pipeline: dict):
         EClient.__init__(self, self)
@@ -22,6 +24,7 @@ class Trading(EWrapper, EClient):
         self.predict = Predict(self.config, self.pipeline)
         self.order = OrderManager(self.config, self.pipeline)
         self.payload = Payload()
+        self.payload.action_dict = self.ACTIONS
 
         contract_info = self.pipeline['pipeline']['contract_info']
         self.contract = Contract()
@@ -72,24 +75,24 @@ class Trading(EWrapper, EClient):
         self.logger.info(f'Account update: {key} {val} {currency} {accountName}')
 
         if key == 'CashBalance' and currency == self.contract.currency:
-            self.cashbalance = float(val)
+            self.payload.cashbalance = float(val)
 
-            self.logger.info(f'cashbalance: {self.cashbalance}')
+            self.logger.info(f'cashbalance: {self.payload.cashbalance}')
 
-            if '_FILL' in self.active_pos:
-                self.active_pos, self.current_pos_list = self.order.positionUnlock(self.active_pos, self.cashbalance, self.CURRENT_POS_LIST, self.order_spec[0])
+            if '_FILL' in self.payload.active_pos:
+                self.payload.update_reward_vars, self.payload.current_pos_list = self.order.positionUnlock(self.payload.active_pos, self.payload.cashbalance, self.payload.current_pos_list, self.payload.order_spec[0])
 
     
     def updatePortfolio(self, contract: Contract, position: float, marketPrice: float, marketValue: float, averageCost: float, unrealizedPNL: float, realizedPNL: float, accountName: str) -> None:
         self.logger.info(f'Portfolio update: {contract} {position} {marketPrice} {marketValue} {averageCost} {unrealizedPNL} {realizedPNL} {accountName}')
 
         if contract.symbol == self.contract.symbol:
-            self.openunits = position
+            self.payload.openunits = position
             
-            self.logger.info(f'openunits: {self.openunits}')
+            self.logger.info(f'openunits: {self.payload.openunits}')
             
-            if '_FILL' in self.active_pos:
-                self.active_pos, self.current_pos_list = self.order.positionUnlock(self.active_pos, self.openunits, self.CURRENT_POS_LIST, self.order_spec[0])     
+            if '_FILL' in self.payload.active_pos:
+                self.payload.update_reward_vars, self.payload.current_pos_list = self.order.positionUnlock(self.payload.active_pos, self.payload.openunits, self.payload.current_pos_list, self.payload.order_spec[0])     
 
     
     def updateAccountTime(self, timeStamp: str) -> None:
@@ -105,55 +108,71 @@ class Trading(EWrapper, EClient):
             self.timer = True
             
         elif (status == 'PreSubmitted' or status == 'Submitted') and filled > 0:
+            self.payload.last_price = avgFillPrice
+            self.payload.last_pos = self.payload.order_spec[0]
+            self.payload.active_pos = '{}_PART'.format(self.payload.temp_action)
             
-            self.last_price = avgFillPrice
-            self.last_pos = self.order_spec[0]
-            self.active_pos = '{}_PEND'.format(self.temp_action)
-            
-            self.logger.info('PART, {self.active_pos}, {self.last_pos}, {self.last_price}')            
+            self.logger.info(f'PART, {self.payload.active_pos}, {self.payload.last_pos}, {self.payload.last_price}')
             
         elif status == 'Filled':
+            self.payload.active_pos = '{}_FILL'.format(self.payload.temp_action)
             self.timing.cancel()
             self.timer = False
             
-            self.last_price = avgFillPrice
-            self.last_pos = self.order_spec[0]
-            self.active_pos = '{}_FILL'.format(self.temp_action)
+            self.payload.last_price = avgFillPrice
+            self.payload.last_pos = self.payload.order_spec[0]
             
-            self.logger.info('FILL, {self.active_pos}, {self.last_pos}, {self.last_price}')  
+            self.logger.info(f'FILL, {self.payload.active_pos}, {self.payload.last_pos}, {self.payload.last_price}')  
 
 
     def stopCancel(self, orderId):
-        if '_PEND' in self.active_pos:
+        if '_PEND' in self.payload.active_pos or '_PART' in self.payload.active_pos:
             self.cancelOrder(orderId)
             self.timer = False
-            self.active_pos = self.last_pos
+
+            if '_PEND' in self.payload.active_pos:
+                self.payload.active_pos = self.payload.last_pos
+
+            if '_PART' in self.payload.active_pos:
+                self.payload.active_pos = '{}_FILL'.format(self.payload.temp_action)
         
 
     def trading_algorithm(self, state: dict) -> None:
         action, _ = self.predict.get_action(state)
 
-        action_int = action.item()
+        self.payload.action_int = action.item()
 
-        self.logger.info(f'action: {action_int}')
+        self.payload.action_str = self.payload.action_dict[self.payload.action_int]
 
-        take_action = self.order.checkAction(action_int, self.active_pos)
+        self.logger.info(f'action: {self.payload.action_str}, model prediction: {self.payload.action_int}')
+
+        if self.payload.release_trade == True:
+            self.payload.active_pos = self.payload.last_pos
+            self.payload.release_trade = False
+
+        take_action = self.order.checkAction(self.payload.action_str, self.payload.active_pos)
 
         if take_action:
-            #TODO Does temp action need to be parsed along?
-            self.temp_action = action_int
-
-            #TODO No last_price yet
-            self.order_spec = self.order.calcOrderSpec(self.cashbalance, self.openunits, action_int, self.active_pos, 
-                                                       self.last_price)
-
-            #TODO Possibly execute within Trading class
-            order, self.active_pos = self.order.executeOrder(self.contract, self.temp_action, self.order_spec[1])
-            
-            #TODO This should be a separate method along with above
-            self.placeOrder(self.nextOrderId(), self.contract, order)
+            self.logger.info('Action requested')
+            self.executeOrder()
         else:
             self.logger.info('No action taken')
+
+        return None
+    
+
+    def executeOrder(self) -> None:
+        self.payload.previous_pos = self.payload.active_pos
+
+        self.payload.temp_action = self.payload.action_str
+
+        self.payload.temp_action_int = self.payload.action_int
+
+        self.payload.order_spec = self.order.calcOrderSpec(self.payload.cashbalance, self.payload.openunits, self.payload.temp_action, self.payload.active_pos, self.payload.live_price)
+
+        order, self.payload.active_pos = self.order.buildOrder(self.payload.temp_action, self.payload.order_spec[1])
+        
+        self.placeOrder(self.nextOrderId(), self.contract, order)
 
         return None
     
