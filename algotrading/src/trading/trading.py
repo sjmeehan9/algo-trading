@@ -9,7 +9,7 @@ from .order import OrderManager
 from .payload import Payload
 
 class Trading(EWrapper, EClient):
-    BASE_SECONDS = 60
+    BASE_SECONDS = 180
     CURRENT_POS_LIST = []
     ACTIONS = {0: 'NONE', 1: 'BUY', 2: 'SELL', 'NONE': 0, 'BUY': 1, 'SELL': 2}
 
@@ -104,7 +104,7 @@ class Trading(EWrapper, EClient):
         self.logger.info(f'OrderStatus. Id: {orderId}, Status: {status}, {filled}, {remaining}, {avgFillPrice}, {permId}, {parentId}, {lastFillPrice}, {clientId}, {whyHeld}, {mktCapPrice}')
         
         if (status == 'PreSubmitted' or status == 'Submitted') and filled == 0:
-            self.timing = Timer(15, self.stopCancel, args=[self.oid])
+            self.timing = Timer(4, self.stopCancel, args=[self.oid])
             self.timing.start()
             self.timer = True
             

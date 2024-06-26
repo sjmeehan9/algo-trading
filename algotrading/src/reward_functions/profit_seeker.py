@@ -76,8 +76,8 @@ class ProfitSeeker(Financials):
         self.current_position = reward_variable_dict['current_position'][-1]
 
         self.strike_price = state_df['close'].iloc[-2]
-        self.strike_buy = self.strike_price / self.commision_factor
-        self.strike_sell = self.strike_price * self.commision_factor
+        self.strike_buy = self.strike_price / self.price_penalty
+        self.strike_sell = self.strike_price * self.price_penalty
 
         reward_variable_dict = self.reward_variable_step(action, state_df, reward_variable_dict, terminated)
 
@@ -160,10 +160,10 @@ class ProfitSeeker(Financials):
 
     def set_current_prices(self, state_df: pd.DataFrame) -> None:
         self.new_price = state_df['close'].iloc[-1]
-        self.new_buy = self.new_price / self.commision_factor
-        self.new_sell = self.new_price * self.commision_factor
-        self.price_paid_buy = self.PRICE_PAID / self.commision_factor
-        self.price_paid_sell = self.PRICE_PAID * self.commision_factor
+        self.new_buy = self.new_price / self.price_penalty
+        self.new_sell = self.new_price * self.price_penalty
+        self.price_paid_buy = self.PRICE_PAID / self.price_penalty
+        self.price_paid_sell = self.PRICE_PAID * self.price_penalty
 
         return None
     
