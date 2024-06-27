@@ -19,10 +19,10 @@ class TradingStream:
             data_stream = LiveData(self.config, self.pipeline)
             data_stream.connect(self.config['ip_address'], self.config['port'], self.client_id['live'])
             Timer(data_stream.timer, data_stream.stop).start()
-            return data_stream
+            data_stream.run()
         elif self.mode == 'fake':
             data_stream = StreamFaker(self.config, self.pipeline)
-            return data_stream
+            data_stream.run()
         else:
             raise ValueError('Invalid mode')
         
@@ -30,8 +30,6 @@ class TradingStream:
     def start(self) -> None:
         self.logger.info('Algo trading session started')
 
-        data_stream = self.streamer()
-        
-        data_stream.run()
+        self.streamer()
 
         return None

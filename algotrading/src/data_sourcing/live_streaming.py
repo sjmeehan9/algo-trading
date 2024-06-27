@@ -12,7 +12,7 @@ class LiveData(EWrapper, EClient):
     CONFIG_FILENAME = 'live_streaming.yml'
     HISTORICAL_CONFIG = 'historical_data.yml'
     CURRENT_BAR = ''
-    BASE_SECONDS = 180
+    BASE_SECONDS = 30
     INIT_REQUEST_ID = 1000
     DATE_COLUMN = 'date'
 
@@ -55,7 +55,7 @@ class LiveData(EWrapper, EClient):
         self.timer = self.setTimer()
 
         
-    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson) -> None:
+    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson='') -> None:
         self.logger.info(f'Error: {reqId}, {errorCode}, {errorString}')
 
 
@@ -66,6 +66,8 @@ class LiveData(EWrapper, EClient):
     def nextValidId(self, orderId: int) -> None:
         super().nextValidId(orderId)
         self.nextValidOrderId = orderId
+
+        self.logger.info(f'Starting LiveData connection: {self.nextValidOrderId}')
 
         self.start()
 
@@ -187,7 +189,6 @@ class LiveData(EWrapper, EClient):
 
 
     def start(self) -> None:
-        
         self.req_it = self.INIT_REQUEST_ID
 
         # Request live realTimeBars data

@@ -2,14 +2,15 @@ import logging
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
-import pandas as pd
-from threading import Timer
+from threading import Timer, Thread
 from ..models.predict import Predict
 from .order import OrderManager
 from .payload import Payload
 
 class Trading(EWrapper, EClient):
-    BASE_SECONDS = 180
+    ELIGABLE_STREAM = 'real'
+    BASE_SECONDS = 30
+    TRADE_TIMER = 4
     CURRENT_POS_LIST = []
     ACTIONS = {0: 'NONE', 1: 'BUY', 2: 'SELL', 'NONE': 0, 'BUY': 1, 'SELL': 2}
 
@@ -35,30 +36,31 @@ class Trading(EWrapper, EClient):
         self.contract.primaryExchange = contract_info['primaryExchange']
 
         self.account = self.config['account_number']
-        self.enable_trading = self.config['stream_data'] == 'fake'
+        self.enable_trading = self.config['stream_data'] == self.ELIGABLE_STREAM
+        self.logger.info(f'Enable trading: {self.enable_trading}')
+
+        client_id = self.pipeline['pipeline']['client_id']
+        super().connect(self.config['ip_address'], self.config['port'], client_id['trading'])
+
+        thread = Thread(target=self.run)
+        thread.start()
+        setattr(self, "_thread", thread)
 
         self.timer = self.setTimer()
+        Timer(self.timer, self.stop).start()
 
 
-    def error(self, reqId, errorCode, errorString) -> None:
+    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson='') -> None:
         self.logger.info(f'Error: {reqId}, {errorCode}, {errorString}')
-
-
-    def connect(self, ip_address, port, client_id):
-        super().connect(ip_address, port, client_id)
-
-        #
-        self.logger.info('Trading connection request sent')
-
-        self.start()
 
 
     def nextValidId(self, orderId: int) -> None:
         super().nextValidId(orderId)
         self.nextValidOrderId = orderId
 
-        #
         self.logger.info('Starting Trading connection')
+
+        self.start()
 
 
     def nextOrderId(self):
@@ -73,8 +75,6 @@ class Trading(EWrapper, EClient):
 
     # Account data updates
     def updateAccountValue(self, key: str, val: str, currency: str, accountName: str) -> None:
-        self.logger.info(f'Account update: {key} {val} {currency} {accountName}')
-
         if key == 'CashBalance' and currency == self.contract.currency:
             self.payload.cashbalance = float(val)
 
@@ -85,8 +85,6 @@ class Trading(EWrapper, EClient):
 
     
     def updatePortfolio(self, contract: Contract, position: float, marketPrice: float, marketValue: float, averageCost: float, unrealizedPNL: float, realizedPNL: float, accountName: str) -> None:
-        self.logger.info(f'Portfolio update: {contract} {position} {marketPrice} {marketValue} {averageCost} {unrealizedPNL} {realizedPNL} {accountName}')
-
         if contract.symbol == self.contract.symbol:
             self.payload.openunits = position
             
@@ -104,7 +102,7 @@ class Trading(EWrapper, EClient):
         self.logger.info(f'OrderStatus. Id: {orderId}, Status: {status}, {filled}, {remaining}, {avgFillPrice}, {permId}, {parentId}, {lastFillPrice}, {clientId}, {whyHeld}, {mktCapPrice}')
         
         if (status == 'PreSubmitted' or status == 'Submitted') and filled == 0:
-            self.timing = Timer(4, self.stopCancel, args=[self.oid])
+            self.timing = Timer(self.TRADE_TIMER, self.stopCancel, args=[self.oid])
             self.timing.start()
             self.timer = True
             
@@ -127,6 +125,8 @@ class Trading(EWrapper, EClient):
 
 
     def stopCancel(self, orderId):
+        self.logger.info(f'order cancelled: {orderId}, {self.payload.active_pos}')
+
         if '_PEND' in self.payload.active_pos or '_PART' in self.payload.active_pos:
             self.cancelOrder(orderId)
             self.timer = False
@@ -139,10 +139,11 @@ class Trading(EWrapper, EClient):
         
 
     def tradingAlgorithm(self, state: dict) -> None:
+        self.logger.info(f'Pre action payload: {self.payload}')
+
         action, _ = self.predict.get_action(state)
 
         self.payload.action_int = action.item()
-
         self.payload.action_str = self.payload.action_dict[self.payload.action_int]
 
         self.logger.info(f'action: {self.payload.action_str}, model prediction: {self.payload.action_int}')
@@ -158,6 +159,8 @@ class Trading(EWrapper, EClient):
             self.executeOrder()
         else:
             self.logger.info('No action taken')
+            self.payload.action_int = 0
+            self.payload.action_str = self.payload.action_dict[self.payload.action_int]
 
         return None
     
@@ -179,17 +182,15 @@ class Trading(EWrapper, EClient):
     
 
     def start(self) -> None:
-
-        #
         self.logger.info('Calling reqAccountUpdates')
         
-        self.reqAccountUpdates(True, '')
+        self.reqAccountUpdates(True, self.account)
     
     
     def stop(self) -> None:
         self.logger.info('Trading connection closed')
 
-        self.reqAccountUpdates(False, '')
+        self.reqAccountUpdates(False, self.account)
         
         self.done = True
         self.disconnect()

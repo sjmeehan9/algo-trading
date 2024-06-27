@@ -13,6 +13,7 @@ class OrderManager:
 
 
     def checkAction(self, action, active_pos) -> bool:
+        self.logger.info(f'Action: {action}, Active position: {active_pos}')
         if action != 'NONE' and action != active_pos and '_PEND' not in active_pos and '_PART' not in active_pos and '_FILL' not in active_pos:
             return True
         else:
@@ -20,7 +21,6 @@ class OrderManager:
         
 
     def calcOrderSpec(self, balance, units, action, activePos, price):
-        
         adj_balance = balance * self.balance_multiplier
         unit_amt = round(adj_balance / price, 0)
         mod_string = activePos + action

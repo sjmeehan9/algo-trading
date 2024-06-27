@@ -1,16 +1,10 @@
 # Config settings for main.py script
 ip_address: 127.0.0.1
-
 port: 7497
-
 account_number: DU8392034
-
 pipeline: pipeline_0001
-
 log_path: logs/
-
 data_path: data/
-
 task_selection: task3
 
 # Settings for task 1
@@ -24,11 +18,8 @@ date_list:
 
 # Settings for task 2
 data_mode: historical
-
 input_model: ppo_0000
-
 save_to_file: ppo_0000
-
 training_date_list:
   - 2022-01-03
   - 2023-01-01
@@ -37,12 +28,10 @@ training_date_list:
   - 2023-01-09
 
 # Settings for task 3
-stream_data: fake
-
+stream_data: real
 trading_model: ppo_0000
 
 # Settings for task 4
 backtest_model: ppo_0011
-
 backtest_date_list:
   - 2024-04-30

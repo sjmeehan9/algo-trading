@@ -4,7 +4,6 @@ import numpy as np
 import os
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-from threading import Timer
 from ..trading.trading import Trading
 from ..reward_functions.reward import reward_factory
 
@@ -267,11 +266,7 @@ class StateBuilder:
         elif self.config['task_selection'] == 'task3':
             self.terminated = False
 
-            client_id = self.pipeline['pipeline']['client_id']
             app = Trading(self.config, self.pipeline)
-            app.connect(self.config['ip_address'], self.config['port'], client_id['trading'])
-            Timer(app.timer, app.stop).start()
-
             self.trading = app
 
             route = self.trading_step
@@ -334,7 +329,9 @@ class StateBuilder:
 
         self.state = {key: np.array(value) for key, value in self.state.items()}
 
-        self.state.update(reward_variable_dict) 
+        self.state.update(reward_variable_dict)
+
+        self.logger.info(f'state updated: {self.state}')
 
         # Sent state to trading_algorithm
         self.trading.tradingAlgorithm(self.state)

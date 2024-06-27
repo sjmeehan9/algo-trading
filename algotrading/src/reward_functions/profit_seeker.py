@@ -54,7 +54,7 @@ class ProfitSeeker(Financials):
             payload.release_trade = True
             payload.update_reward_vars = False
         elif '_' in payload.active_pos:
-            action = 0
+            action = payload.action_int
             self.current_position = payload.action_dict[payload.previous_pos]
             self.strike_price = state_df['close'].iloc[-2]
         else:
