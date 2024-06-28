@@ -1,55 +1,37 @@
 # Config settings for main.py script
 ip_address: 127.0.0.1
-
 port: 7497
-
+account_number: DU8392034
 pipeline: pipeline_0001
-
 log_path: logs/
-
 data_path: data/
-
 task_selection: task3
 
 # Settings for task 1
 date_list:
-  - 2024-04-24
-  - 2024-04-25
-  - 2024-04-26
-  - 2024-04-27
-  - 2024-04-28
-  - 2024-04-29
-  - 2024-04-30
+  - 2022-10-01
+  - 2022-10-02
+  - 2022-10-03
+  - 2022-10-04
+  - 2022-10-05
+  - 2022-10-06
 
 # Settings for task 2
 data_mode: historical
-
-input_model: dqn_0004
-
-save_to_file: dqn_0005
-
+input_model: ppo_0000
+save_to_file: ppo_0000
 training_date_list:
-  - 2023-03-17
-  - 2023-03-18
-  - 2023-03-19
-  - 2023-03-20
-  - 2023-03-21
-  - 2023-03-22
-  - 2023-03-23
-  - 2023-03-24
-  - 2023-03-25
-  - 2023-03-26
-  - 2023-03-27
-  - 2023-03-28
-  - 2023-03-29
-  - 2023-03-30
-  - 2023-03-31
+  - 2022-01-03
+  - 2023-01-01
+  - 2023-01-02
+  - 2023-01-03
+  - 2023-01-09
 
 # Settings for task 3
-stream_data: fake
+stream_data: real
+trading_model: ppo_0011
 
 # Settings for task 4
-backtest_model: dqn_0002
-
+backtest_model: ppo_0011
 backtest_date_list:
-  - 2023-01-30
+  - 2024-04-30

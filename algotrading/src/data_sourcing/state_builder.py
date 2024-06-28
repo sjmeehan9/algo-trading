@@ -4,6 +4,8 @@ import numpy as np
 import os
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+from ..trading.trading import Trading
+from ..reward_functions.reward import reward_factory
 
 class StateBuilder:
     START_DATEPART = -4
@@ -18,10 +20,7 @@ class StateBuilder:
 
         self.initialise_counters()
 
-
-    def live_data(self, queue: pd.DataFrame) -> None:
-        self.logger.info('Live data received')
-        return None
+        self.live_data_function = self.initialise_live_data()
 
 
     def read_data(self, evaluate: bool) -> None:
@@ -111,20 +110,34 @@ class StateBuilder:
         }
 
         return None
+    
+
+    def task_state(self) -> None:
+        if self.config['task_selection'] == 'task3':
+            self.file_offset = 0
+            self.final_dataframe = self.queue
+        elif self.config['task_selection'] == 'task2' and self.config['data_mode'] == 'live':
+            self.file_offset = 0
+            self.final_dataframe = self.queue
+        elif self.config['task_selection'] == 'task2' and self.config['data_mode'] == 'historical':
+            self.terminated = False
+            self.timed_out = False
+            self.file_offset = self.state_counters['window'] * (self.episode_length + self.window_end)
+        else:
+            self.logger.error('Data usage not supported')
+            raise NotImplementedError('Data usage not supported')
+
+        return None
 
 
     def initialise_state(self, reward: object) -> None:
-        self.terminated = False
-
-        self.timed_out = False
-
         self.reward = reward
 
         self.reward_variables = self.reward.initial_reward_variables()
 
         self.window_end = self.pipeline['pipeline']['model_data_config']['past_events']
 
-        self.file_offset = self.state_counters['window'] * (self.episode_length + self.window_end)
+        self.task_state()
 
         self.file_step = self.state_counters['step'] + self.file_offset
 
@@ -221,7 +234,7 @@ class StateBuilder:
             self.timed_out = True
 
         # Call each reward variable function to calculate the new values for the latest time
-        reward_variable_dict = self.reward.reward_variable_step(action, self.state_df, reward_variable_dict, self.terminated)
+        reward_variable_dict = self.reward.reward_step(action, self.state_df, reward_variable_dict, self.terminated)
 
         # store the state dictionary
         self.state = temp_dataframe.to_dict(orient='list')
@@ -229,11 +242,103 @@ class StateBuilder:
         self.state = {key: np.array(value) for key, value in self.state.items()}
 
         self.state.update(reward_variable_dict)
-        
+
         return None
 
 
     def update_episode_counter(self) -> None:
         self.state_counters['window'] += 1
         self.state_counters['episode'] += 1
+        return None
+
+    
+    def initialise_live_data(self) -> object:
+        # Flag for completed initialisation
+        self.initialised = False
+
+        # Init reward for use in live data tasks
+        reward_name = self.pipeline['pipeline']['model']['model_reward']
+        self.reward = reward_factory(reward_name, self.config, self.pipeline)
+
+        # Route to the correct function based on the task selection
+        if self.config['task_selection'] == 'task2':
+            route = self.live_step
+        elif self.config['task_selection'] == 'task3':
+            self.terminated = False
+
+            app = Trading(self.config, self.pipeline)
+            self.trading = app
+
+            route = self.trading_step
+        else:
+            self.logger.error('Live data usage not supported')
+            route = None
+        
+        self.logger.info(f'Initialised live data function')
+        return route
+
+
+    def live_data(self, queue: pd.DataFrame) -> None:
+        self.logger.info(f'Live data received by StateBuilder')
+        self.queue = queue
+
+        if self.initialised:
+            self.live_data_function()
+        else:
+            self.initialise_state(self.reward)
+            self.initialised = True
+
+        return None
+    
+
+    def trading_step(self) -> None:
+        self.final_dataframe = self.queue
+
+        # Grab the next window of data
+        frame_start = self.file_step
+        frame_end = self.file_step + self.window_end
+        self.state_df = self.final_dataframe.iloc[frame_start:frame_end]
+
+        # Create an empty dataframe
+        temp_dataframe = pd.DataFrame()
+        
+        # If scale_columns list not empty, append to a temp dataframe
+        if self.scale_columns:
+            temp_dataframe = self.state_df[self.scale_columns]
+
+            scaled_data = self.SCALER.fit_transform(temp_dataframe)
+
+            temp_dataframe = pd.DataFrame(scaled_data, columns=self.scale_columns)
+
+        # If unscale_columns list not empty, append to temp dataframe
+        if self.unscaled_columns:
+            unscaled_df = self.state_df[self.unscaled_columns].reset_index(drop=True)
+
+            temp_dataframe = pd.concat([temp_dataframe, unscaled_df], axis=1)
+        
+        # For the custom variables, grab the previous step values from the last step
+        reward_variable_dict = {key: self.state[key][1:] for key, value in self.reward_variables.items()}
+
+        payload = self.trading.payload
+
+        # Get latest values for the custom reward variables
+        reward_variable_dict = self.reward.reward_step(payload, self.state_df, reward_variable_dict, self.terminated)
+
+        # store the state dictionary
+        self.state = temp_dataframe.to_dict(orient='list')
+
+        self.state = {key: np.array(value) for key, value in self.state.items()}
+
+        self.state.update(reward_variable_dict)
+
+        self.logger.info(f'state updated: {self.state}')
+
+        # Sent state to trading_algorithm
+        self.trading.tradingAlgorithm(self.state)
+
+        return None
+
+
+    def live_step(self) -> None:
+        self.logger.info(f'Live step not yet implemented')
         return None

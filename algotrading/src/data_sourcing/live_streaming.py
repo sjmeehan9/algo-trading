@@ -1,3 +1,4 @@
+import datetime
 import logging
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
@@ -11,7 +12,7 @@ class LiveData(EWrapper, EClient):
     CONFIG_FILENAME = 'live_streaming.yml'
     HISTORICAL_CONFIG = 'historical_data.yml'
     CURRENT_BAR = ''
-    BASE_SECONDS = 20
+    BASE_SECONDS = 180
     INIT_REQUEST_ID = 1000
     DATE_COLUMN = 'date'
 
@@ -54,13 +55,19 @@ class LiveData(EWrapper, EClient):
         self.timer = self.setTimer()
 
         
-    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson) -> None:
+    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson='') -> None:
         self.logger.info(f'Error: {reqId}, {errorCode}, {errorString}')
+
+
+    def connect(self, ip_address, port, client_id):
+        super().connect(ip_address, port, client_id)
 
 
     def nextValidId(self, orderId: int) -> None:
         super().nextValidId(orderId)
         self.nextValidOrderId = orderId
+
+        self.logger.info(f'Starting LiveData connection: {self.nextValidOrderId}')
 
         self.start()
 
@@ -156,6 +163,8 @@ class LiveData(EWrapper, EClient):
     # Receive live data
     def realtimeBar(self, reqId, time, open_, high, low, close, volume, wap, count) -> None:
 
+        self.logger.info('Start of trade data flow: %s', datetime.datetime.now())
+
         new_row = {self.bar_columns['bar_date']: time, 
                     self.bar_columns['bar_open']: open_, 
                     self.bar_columns['bar_high']: high, 
@@ -178,9 +187,7 @@ class LiveData(EWrapper, EClient):
             self.CURRENT_BAR = time
 
 
-    def start(self) -> None:       
-
-        logging.getLogger().setLevel(logging.INFO)
+    def start(self) -> None:
         self.req_it = self.INIT_REQUEST_ID
 
         # Request live realTimeBars data
@@ -188,6 +195,7 @@ class LiveData(EWrapper, EClient):
 
             
     def stop(self) -> None:
+        self.logger.info('LiveData connection closed')
 
         self.cancelRealTimeBars(self.req_it)
         

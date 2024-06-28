@@ -2,6 +2,11 @@
     "pipeline": {
         "filename": "pipeline_0001",
         "description": "Basic RL model for AMD NASDAQ stock",
+        "client_id": {
+            "historical": 0,
+            "live": 1,
+            "trading": 2
+        },
         "timezone": "US/Eastern",
         "contract_info": {
             "symbol": "AMD",
@@ -9,6 +14,10 @@
             "exchange": "SMART",
             "currency": "USD",
             "primaryExchange": "NASDAQ"
+        },
+        "trading_config": {
+            "order_type": "MKT",
+            "balance_multiplier": 0.9
         },
         "historical_data_config": {
             "columns": ["date", "open", "high", "low", "close", "volume", "wap", "count"],
@@ -38,17 +47,16 @@
                 "count": [false, true]
             },
             "file_trim": 0.038,
-            "past_events": 60,
-            "queue_buffer": 90
+            "past_events": 60
         },
         "model": {
             "pipeline_type": "rl",
-            "model_type": "dqn",
+            "model_type": "ppo",
             "model_policy": "MultiInputPolicy",
             "model_reward": "profit_seeker",
             "file_extension": ".zip",
             "model_config": {
-                "buffer_size": 150000,
+                "n_steps": 2048,
                 "batch_size": 64,
                 "gamma": 0.99,
                 "verbose": 1

@@ -1,0 +1,6 @@
+include README.md
+include requirements.txt
+recursive-include config *
+recursive-include pipeline_settings *
+recursive-include sample *
+recursive-include tests *

@@ -12,7 +12,7 @@ class StreamQueue:
         self.config = config
         self.pipeline = pipeline
 
-        self.buffer_size = self.pipeline['pipeline']['model_data_config']['queue_buffer']
+        self.buffer_size = self.pipeline['pipeline']['model_data_config']['past_events']
         self.pipeline_type = self.pipeline['pipeline']['model']['pipeline_type']
 
         self.queue = pd.DataFrame()
@@ -48,7 +48,8 @@ class StreamQueue:
             self.queue = self.queue.tail(self.buffer_size)
 
         if len(self.queue) == self.buffer_size:
-            self.route_function(self.queue.reset_index(drop=True))
+            self.queue = self.queue.reset_index(drop=True)
+            self.route_function(self.queue)
 
         return None
 
@@ -65,4 +66,5 @@ class StreamQueue:
             self.logger.error('Pipeline type not supported')
             route = None
         
+        self.logger.info(f'Route function defined')
         return route
