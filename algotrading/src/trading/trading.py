@@ -1,3 +1,4 @@
+import datetime
 import logging
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
@@ -9,7 +10,7 @@ from .payload import Payload
 
 class Trading(EWrapper, EClient):
     ELIGABLE_STREAM = 'real'
-    BASE_SECONDS = 30
+    BASE_SECONDS = 180
     TRADE_TIMER = 4
     CURRENT_POS_LIST = []
     ACTIONS = {0: 'NONE', 1: 'BUY', 2: 'SELL', 'NONE': 0, 'BUY': 1, 'SELL': 2}
@@ -153,6 +154,8 @@ class Trading(EWrapper, EClient):
             self.payload.release_trade = False
 
         take_action = self.order.checkAction(self.payload.action_str, self.payload.active_pos)
+
+        self.logger.info('End of trade data flow: %s', datetime.datetime.now())
 
         if take_action and self.enable_trading:
             self.logger.info('Action requested')

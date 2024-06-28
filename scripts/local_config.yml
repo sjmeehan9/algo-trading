@@ -29,7 +29,7 @@ training_date_list:
 
 # Settings for task 3
 stream_data: real
-trading_model: ppo_0000
+trading_model: ppo_0011
 
 # Settings for task 4
 backtest_model: ppo_0011

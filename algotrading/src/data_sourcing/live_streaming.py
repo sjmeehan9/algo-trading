@@ -12,7 +12,7 @@ class LiveData(EWrapper, EClient):
     CONFIG_FILENAME = 'live_streaming.yml'
     HISTORICAL_CONFIG = 'historical_data.yml'
     CURRENT_BAR = ''
-    BASE_SECONDS = 30
+    BASE_SECONDS = 180
     INIT_REQUEST_ID = 1000
     DATE_COLUMN = 'date'
 
@@ -163,7 +163,6 @@ class LiveData(EWrapper, EClient):
     # Receive live data
     def realtimeBar(self, reqId, time, open_, high, low, close, volume, wap, count) -> None:
 
-        # Temporary timing of trading data flow
         self.logger.info('Start of trade data flow: %s', datetime.datetime.now())
 
         new_row = {self.bar_columns['bar_date']: time, 
