@@ -57,14 +57,11 @@ def init_task(config: dict, task_options: list, pipeline: dict) -> None:
 
 
 # Init pipeline settings
-def init_pipeline(config: dict) -> dict:
+def init_pipeline(config: dict, current_dir: str) -> dict:
     # Load pipeline settings json
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = Path(current_dir).parents[0]
-
     pipeline_name = config['pipeline']
     pipeline_filename = f'{pipeline_name}.json'
-    pipeline_file_path = os.path.join(parent_dir, 'pipeline_settings/', pipeline_filename)
+    pipeline_file_path = os.path.join(current_dir, 'pipeline_settings/', pipeline_filename)
     pipeline = pipeline_loader(pipeline_file_path)
 
     return pipeline

@@ -5,21 +5,21 @@ account_number: DU8392034
 pipeline: pipeline_0001
 log_path: logs/
 data_path: data/
-task_selection: task3
+task_selection: task2
 
 # Settings for task 1
 date_list:
-  - 2022-10-01
-  - 2022-10-02
-  - 2022-10-03
-  - 2022-10-04
-  - 2022-10-05
-  - 2022-10-06
+  - 2022-10-13
+  - 2022-10-14
+  - 2022-10-15
+  - 2022-10-16
+  - 2022-10-17
+  - 2022-10-18
 
 # Settings for task 2
 data_mode: historical
 input_model: ppo_0000
-save_to_file: ppo_0000
+save_to_file: ppo_0001
 training_date_list:
   - 2022-01-03
   - 2023-01-01

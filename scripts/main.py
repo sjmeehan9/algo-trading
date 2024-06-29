@@ -2,9 +2,9 @@ import datetime
 import logging
 import os
 
-import sys
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.dirname(SCRIPT_DIR))
+# import sys
+# SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# sys.path.append(os.path.dirname(SCRIPT_DIR))
 # TODO Remove two lines above once algotrading is a package
 
 from algotrading import (config_loader,
@@ -30,7 +30,7 @@ def main(filename: str) -> None:
     task_options = print_task_options()
 
     # Pipeline initialization
-    pipeline = init_pipeline(config)
+    pipeline = init_pipeline(config, main_dir)
 
     # Setup logger
     setup_logger(config['log_path'])
