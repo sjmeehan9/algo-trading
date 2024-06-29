@@ -30,7 +30,7 @@ def main(filename: str) -> None:
     task_options = print_task_options()
 
     # Pipeline initialization
-    pipeline = init_pipeline(config)
+    pipeline = init_pipeline(config, main_dir)
 
     # Setup logger
     setup_logger(config['log_path'])
