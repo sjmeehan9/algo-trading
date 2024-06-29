@@ -1,12 +1,15 @@
 from setuptools import find_packages, setup
 
+with open("app/README.md", "r") as f:
+    long_description = f.read()
+
 setup(
     name='algo-trading',
     version='0.1.0',
     author='Sean Meehan',
     author_email='sjmeehan9@gmail.com',
     description='Build AI/ML trading models, backtest and trade live with the IB API',
-    long_description=open('README.md').read(),
+    long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/sjmeehan9/algo-trading',
     package_dir={'': 'algotrading'},
