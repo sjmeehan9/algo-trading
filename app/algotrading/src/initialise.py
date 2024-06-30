@@ -21,10 +21,7 @@ def init_task(config: dict, task_options: list, pipeline: dict) -> None:
     task_message = f'Now running {task}'
     print(task_message)
 
-    # Create log and data folders
-    if not os.path.exists(config['log_path']):
-        os.makedirs(config['log_path'])
-
+    # Create data folder
     if not os.path.exists(config['data_path']):
         os.makedirs(config['data_path'])
 
