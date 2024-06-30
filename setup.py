@@ -1,10 +1,10 @@
 from setuptools import find_packages, setup
 
-with open("README.md", "r") as f:
+with open('app/README.md', 'r') as f:
     long_description = f.read()
 
 setup(
-    name='algo-trading',
+    name='algotrading',
     version='0.1.0',
     author='Sean Meehan',
     author_email='sjmeehan9@gmail.com',
@@ -12,8 +12,8 @@ setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/sjmeehan9/algo-trading',
-    package_dir={'': 'algotrading'},
-    packages=find_packages(include=['algotrading', 'algotrading.*']),
+    package_dir={'': 'app'},  # Pointing to the algotrading directory
+    packages=find_packages(where='app', include=['*']),
     license='MIT',
     classifiers=[
         'Programming Language :: Python :: 3',
