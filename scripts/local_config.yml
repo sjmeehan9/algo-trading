@@ -5,7 +5,7 @@ account_number: DU8392034
 pipeline: pipeline_0001
 log_path: logs/
 data_path: data/
-task_selection: task2
+task_selection: task1
 
 # Settings for task 1
 date_list:
