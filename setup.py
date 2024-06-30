@@ -14,6 +14,7 @@ setup(
     url='https://github.com/sjmeehan9/algo-trading',
     package_dir={'': 'app'},  # Pointing to the algotrading directory
     packages=find_packages(where='app', include=['*']),
+    include_package_data=True,
     license='MIT',
     classifiers=[
         'Programming Language :: Python :: 3',
