@@ -5,6 +5,8 @@ import time
 # Create and configure logger
 def setup_logger(path, print_logs=False) -> None:
     '''Function setup as many loggers as you want'''
+    if not os.path.exists(path):
+        os.makedirs(path)
 
     time.strftime('pyibapi.%Y%m%d_%H%M%S.log')
 
