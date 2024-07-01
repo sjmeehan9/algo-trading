@@ -42,11 +42,6 @@ def init_task(config: dict, task_options: list, pipeline: dict) -> None:
     elif task == 'task4':
         app = TrainML(config, pipeline, True)
         app.start()
-    elif task == 'task5':
-        app = LiveData(config, pipeline)
-        app.connect(config['ip_address'], config['port'], client_id['live'])
-        Timer(app.timer, app.stop).start()
-        app.run()
     else:
         raise ValueError(f'{task} is not a valid task')
 
