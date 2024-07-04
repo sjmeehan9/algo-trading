@@ -264,19 +264,19 @@ class ProfitSeeker(Financials):
             'sell_short': 10,
             'sell_position': 1,
             'buyback_short': 1,
-            'false_buy': -100,
-            'false_sell': -100
+            'false_buy': -50,
+            'false_sell': -50
         }
 
         action_reward = action_reward_dict[self.action_type]
 
         if state['trade_change'][-1] > 0:
-            trade_profit_reward = state['trade_change'][-1] * 50
+            trade_profit_reward = state['trade_change'][-1] * 75
         else:
             trade_profit_reward = state['trade_change'][-1] * 15
 
         if state['running_profit'][-1] > 0:
-            running_profit_reward = state['running_profit'][-1] * 75
+            running_profit_reward = state['running_profit'][-1] * 100
         else:
             running_profit_reward = state['running_profit'][-1] * 25
 

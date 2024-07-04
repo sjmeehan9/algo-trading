@@ -1,6 +1,7 @@
 import logging
 import os
 import pandas as pd
+import pickle
 from stable_baselines3 import PPO, DQN
 from stable_baselines3.common.env_checker import check_env
 from ..data_sourcing.state_builder import StateBuilder
@@ -159,10 +160,18 @@ class TrainRL:
 
         model_kwargs.update(self.model_config)
 
+        replay_buffer_ext = self.pipeline['pipeline']['model']['replay_buffer_extension']
+
         # Load input model or create new model
         if os.path.exists(self.path_dict['input_filepath']):
             self.model = DQN.load(self.path_dict['input_filepath'], self.env)
             self.logger.info(f'Loaded DQN model from {self.path_dict["input_filepath"]}')
+
+            replay_buffer_filepath = os.path.join(self.path_dict['pipeline_data_path'], self.model_input + replay_buffer_ext)
+            if os.path.exists(replay_buffer_filepath):
+                with open(replay_buffer_filepath, 'rb') as f:
+                    self.model.replay_buffer = pickle.load(f)
+                self.logger.info(f'Loaded replay buffer from {replay_buffer_filepath}')
         else:
             self.model = DQN(**model_kwargs)
             self.logger.info('Created new DQN model')
@@ -172,6 +181,12 @@ class TrainRL:
 
         # Save the model
         self.model.save(self.path_dict['model_filepath'])
+
+        # Save the replay buffer
+        replay_buffer_filepath = os.path.join(self.path_dict['pipeline_data_path'], self.model_filename + replay_buffer_ext)
+        with open(replay_buffer_filepath, 'wb') as f:
+            pickle.dump(self.model.replay_buffer, f)
+        self.logger.info(f'Saved replay buffer to {replay_buffer_filepath}')
 
         return None
     
