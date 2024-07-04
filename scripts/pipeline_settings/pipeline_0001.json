@@ -1,66 +1,93 @@
 {
-    "pipeline": {
-        "filename": "pipeline_0001",
-        "description": "Basic RL model for AMD NASDAQ stock",
-        "client_id": {
-            "historical": 0,
-            "live": 1,
-            "trading": 2
-        },
-        "timezone": "US/Eastern",
-        "contract_info": {
-            "symbol": "AMD",
-            "secType": "STK",
-            "exchange": "SMART",
-            "currency": "USD",
-            "primaryExchange": "NASDAQ"
-        },
-        "trading_config": {
-            "order_type": "MKT",
-            "balance_multiplier": 0.9
-        },
-        "historical_data_config": {
-            "columns": ["date", "open", "high", "low", "close", "volume", "wap", "count"],
-            "barSizeSetting": "5 secs",
-            "whatToShow": "TRADES"
-        },
-        "live_data_config": {
-            "columns": ["date", "open", "high", "low", "close", "volume", "wap", "count"],
-            "barSizeSetting": 5,
-            "whatToShow": "TRADES",
-            "fakerColumnTypes": {
-                "volume": "int", 
-                "wap": "float"
-            }
-        },
-        "env_config": {
-            "env_name": "trading_env"
-        },
-        "model_data_config": {
-            "columns": {
-                "date": [true, false],
-                "open": [false, true],
-                "high": [false, true],
-                "low": [false, true],
-                "close": [false, true],
-                "volume": [false, true],
-                "count": [false, true]
-            },
-            "file_trim": 0.038,
-            "past_events": 60
-        },
-        "model": {
-            "pipeline_type": "rl",
-            "model_type": "ppo",
-            "model_policy": "MultiInputPolicy",
-            "model_reward": "profit_seeker",
-            "file_extension": ".zip",
-            "model_config": {
-                "n_steps": 2048,
-                "batch_size": 64,
-                "gamma": 0.99,
-                "verbose": 1
-            }
-        }
+  "pipeline": {
+    "filename": "pipeline_0001",
+    "description": "Basic RL model for AMD NASDAQ stock",
+    "client_id": {
+      "historical": 0,
+      "live": 1,
+      "trading": 2
+    },
+    "timezone": "US/Eastern",
+    "contract_info": {
+      "symbol": "AMD",
+      "secType": "STK",
+      "exchange": "SMART",
+      "currency": "USD",
+      "primaryExchange": "NASDAQ"
+    },
+    "trading_config": {
+      "order_type": "MKT",
+      "balance_multiplier": 0.9
+    },
+    "historical_data_config": {
+      "columns": [
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "wap",
+        "count"
+      ],
+      "barSizeSetting": "5 secs",
+      "whatToShow": "TRADES"
+    },
+    "live_data_config": {
+      "columns": [
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "wap",
+        "count"
+      ],
+      "barSizeSetting": 5,
+      "whatToShow": "TRADES",
+      "fakerColumnTypes": {
+        "volume": "int",
+        "wap": "float"
+      }
+    },
+    "env_config": {
+      "env_name": "trading_env"
+    },
+    "model_data_config": {
+      "columns": {
+        "date": [true, false],
+        "open": [false, true],
+        "high": [false, true],
+        "low": [false, true],
+        "close": [false, true],
+        "volume": [false, true],
+        "count": [false, true]
+      },
+      "file_trim": 0.038,
+      "past_events": 60
+    },
+    "model": {
+      "pipeline_type": "rl",
+      "model_type": "dqn",
+      "model_policy": "MultiInputPolicy",
+      "model_reward": "profit_seeker",
+      "file_extension": ".zip",
+      "replay_buffer_extension": "_replay_buffer.pkl",
+      "model_config": {
+        "learning_rate": 0.0001,
+        "buffer_size": 150000,
+        "learning_starts": 1000,
+        "batch_size": 32,
+        "gamma": 0.99,
+        "train_freq": 1,
+        "target_update_interval": 10000,
+        "exploration_fraction": 0.1,
+        "exploration_initial_eps": 1.0,
+        "exploration_final_eps": 0.02,
+        "max_grad_norm": 10,
+        "verbose": 1
+      }
     }
+  }
 }

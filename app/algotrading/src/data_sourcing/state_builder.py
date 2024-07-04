@@ -123,6 +123,10 @@ class StateBuilder:
             self.terminated = False
             self.timed_out = False
             self.file_offset = self.state_counters['window'] * (self.episode_length + self.window_end)
+        elif self.config['task_selection'] == 'task4':
+            self.terminated = False
+            self.timed_out = False
+            self.file_offset = self.state_counters['window'] * (self.episode_length + self.window_end)
         else:
             self.logger.error('Data usage not supported')
             raise NotImplementedError('Data usage not supported')
