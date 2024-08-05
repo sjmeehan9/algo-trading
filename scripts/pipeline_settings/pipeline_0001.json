@@ -69,24 +69,33 @@
     },
     "model": {
       "pipeline_type": "rl",
-      "model_type": "dqn",
+      "model_type": "ppo",
       "model_policy": "MultiInputPolicy",
       "model_reward": "profit_seeker",
       "file_extension": ".zip",
       "replay_buffer_extension": "_replay_buffer.pkl",
       "model_config": {
         "learning_rate": 0.0001,
-        "buffer_size": 150000,
-        "learning_starts": 1000,
+        "n_steps": 4096,
         "batch_size": 32,
+        "n_epochs": 20,
         "gamma": 0.99,
-        "train_freq": 1,
-        "target_update_interval": 10000,
-        "exploration_fraction": 0.1,
-        "exploration_initial_eps": 1.0,
-        "exploration_final_eps": 0.02,
-        "max_grad_norm": 10,
-        "verbose": 1
+        "gae_lambda": 0.9,
+        "clip_range": 0.1,
+        "clip_range_vf": null,
+        "ent_coef": 0.1,
+        "vf_coef": 0.5,
+        "max_grad_norm": 0.5,
+        "target_kl": null,
+        "seed": 42,
+        "verbose": 1,
+        "normalize_advantage": true,
+        "policy_kwargs": {
+          "net_arch": {
+            "pi": [256, 256],
+            "vf": [256, 256]
+          }
+        }
       }
     }
   }

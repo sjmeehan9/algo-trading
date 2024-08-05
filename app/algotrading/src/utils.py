@@ -39,18 +39,3 @@ def parse_datetime_tz(s: str) -> datetime:
     dt = tz.localize(dt)
 
     return dt
-
-
-# Print the task options
-def print_task_options() -> list:
-    task_options = ['task1', 'task2', 'task3', 'task4']
-    
-    print('''
-    Task Options:
-    task1: Save batch historical data to csv
-    task2: Train new/existing model using live or historical data
-    task3: Run a trading session using a live or paper account
-    task4: Run a backtest using historical data
-    ''')
-
-    return task_options

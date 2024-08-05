@@ -5,7 +5,7 @@ account_number: DU8392034
 pipeline: pipeline_0001
 log_path: logs/
 data_path: data/
-task_selection: task4
+task_selection: task2
 
 # Settings for task 1
 date_list:
@@ -19,8 +19,8 @@ date_list:
 
 # Settings for task 2
 data_mode: historical
-input_model: dqn_0002
-save_to_file: dqn_0003
+input_model: ppo_x
+save_to_file: ppo_y
 training_date_list:
   - 2022-03-01
   - 2022-03-02
@@ -29,25 +29,12 @@ training_date_list:
   - 2022-03-05
   - 2022-03-06
   - 2022-03-07
-  - 2022-03-08
-  - 2022-03-09
-  - 2022-03-10
-  - 2022-03-11
-  - 2022-03-12
-  - 2022-03-13
-  - 2022-03-14
-  - 2022-03-15
-  - 2022-03-16
-  - 2022-03-17
-  - 2022-03-18
-  - 2022-03-19
-  - 2022-03-20
 
 # Settings for task 3
 stream_data: real
-trading_model: ppo_0011
+trading_model: ppo_x
 
 # Settings for task 4
-backtest_model: dqn_0003
+backtest_model: ppo_x
 backtest_date_list:
-  - 2022-03-22
+  - 2022-01-03
