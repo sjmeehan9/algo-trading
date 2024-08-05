@@ -1,11 +1,15 @@
 import os
-from pathlib import Path
 from threading import Timer
 from .data_sourcing.save_historical import PastData
-from .data_sourcing.live_streaming import LiveData
 from .models.train_ml import TrainML
 from .load_config import pipeline_loader
 from .trading.trading_data import TradingStream
+
+# Print the task options
+def task_options() -> list:
+    task_options = ['task1', 'task2', 'task3', 'task4']
+    return task_options
+
 
 # Init task functions
 def init_task(config: dict, task_options: list, pipeline: dict) -> None:

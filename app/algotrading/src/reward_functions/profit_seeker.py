@@ -1,4 +1,5 @@
 import logging
+import math
 import numpy as np
 import pandas as pd
 import warnings
@@ -256,31 +257,45 @@ class ProfitSeeker(Financials):
     def calculate_reward(self, state: dict) -> float:
         base_reward = 0
 
+        trade_change = state['trade_change'][-1]
+        position_change = state['trade_change'][-2]
+        running_change = state['running_profit'][-1]
+
+        if trade_change > 0:
+            trade_profit_reward = trade_change * 5
+        elif trade_change < 0:
+            trade_profit_reward = trade_change
+        else:
+            trade_profit_reward = 0
+
+        if position_change > 0:
+            position_reward = position_change * 500
+        elif position_change < 0:
+            position_reward = 0
+        else:
+            position_reward = 0
+
+        if running_change > 0:
+            running_profit = math.ceil(running_change)
+            running_profit_reward = running_profit ** 3
+        else:
+            running_profit_reward = 0
+
         action_reward_dict = {
-            'hold_nothing': 0,
-            'hold_long_position': 2,
-            'hold_short_position': 2,
-            'buy_long': 10,
-            'sell_short': 10,
-            'sell_position': 1,
-            'buyback_short': 1,
-            'false_buy': -50,
-            'false_sell': -50
+            'hold_nothing': 0.5,
+            'hold_long_position': 1.5 + trade_profit_reward,
+            'hold_short_position': 1.5 + trade_profit_reward,
+            'buy_long': 1,
+            'sell_short': 1,
+            'sell_position': 1 + position_reward,
+            'buyback_short': 1 + position_reward,
+            'false_buy': -10,
+            'false_sell': -10
         }
 
         action_reward = action_reward_dict[self.action_type]
 
-        if state['trade_change'][-1] > 0:
-            trade_profit_reward = state['trade_change'][-1] * 75
-        else:
-            trade_profit_reward = state['trade_change'][-1] * 15
-
-        if state['running_profit'][-1] > 0:
-            running_profit_reward = state['running_profit'][-1] * 100
-        else:
-            running_profit_reward = state['running_profit'][-1] * 25
-
-        reward = base_reward + action_reward + trade_profit_reward + running_profit_reward
+        reward = base_reward + action_reward + running_profit_reward
 
         self.logger.info(f'step reward: {reward}')
         
