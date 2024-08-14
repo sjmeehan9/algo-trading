@@ -99,15 +99,17 @@ class Trading(EWrapper, EClient):
         self.logger.info(f'Account time update: {timeStamp}')
 
 
-    def orderStatus(self, orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId, whyHeld, mktCapPrice):
+    def orderStatus(self, orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId, whyHeld, mktCapPrice) -> None:
         self.logger.info(f'OrderStatus. Id: {orderId}, Status: {status}, {filled}, {remaining}, {avgFillPrice}, {permId}, {parentId}, {lastFillPrice}, {clientId}, {whyHeld}, {mktCapPrice}')
         
-        if (status == 'PreSubmitted' or status == 'Submitted') and filled == 0:
+        if (status == 'PreSubmitted' or status == 'Submitted') and filled == 0 and self.payload.order_spec[2] == 'open':
             self.timing = Timer(self.TRADE_TIMER, self.stopCancel, args=[self.oid])
             self.timing.start()
             self.timer = True
+
+            self.logger.info(f'NONE, {self.payload.active_pos}, {self.payload.last_pos}, {self.payload.last_price}')
             
-        elif (status == 'PreSubmitted' or status == 'Submitted') and filled > 0:
+        elif (status == 'PreSubmitted' or status == 'Submitted') and filled > 0 and self.payload.order_spec[2] == 'open':
             self.payload.last_price = avgFillPrice
             self.payload.last_pos = self.payload.order_spec[0]
             self.payload.active_pos = '{}_PART'.format(self.payload.temp_action)
@@ -125,7 +127,7 @@ class Trading(EWrapper, EClient):
             self.logger.info(f'FILL, {self.payload.active_pos}, {self.payload.last_pos}, {self.payload.last_price}')  
 
 
-    def stopCancel(self, orderId):
+    def stopCancel(self, orderId) -> None:
         self.logger.info(f'order cancelled: {orderId}, {self.payload.active_pos}')
 
         if '_PEND' in self.payload.active_pos or '_PART' in self.payload.active_pos:

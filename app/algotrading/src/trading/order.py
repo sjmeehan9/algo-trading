@@ -20,7 +20,7 @@ class OrderManager:
             return False
         
 
-    def calcOrderSpec(self, balance, units, action, activePos, price):
+    def calcOrderSpec(self, balance, units, action, activePos, price) -> list:
         adj_balance = balance * self.balance_multiplier
         unit_amt = round(adj_balance / price, 0)
         mod_string = activePos + action
@@ -30,10 +30,10 @@ class OrderManager:
         
         self.logger.info(f'Figures: adj_balance {adj_balance}, unit_amt {unit_amt}, mod_string {mod_string}')
         
-        action_dict = {'NONEBUY': ['BUY', unit_amt],
-                       'SELLBUY': ['NONE', abs(units)],
-                       'NONESELL': ['SELL', unit_amt],
-                       'BUYSELL': ['NONE', abs(units)]}
+        action_dict = {'NONEBUY': ['BUY', unit_amt, 'open'],
+                       'SELLBUY': ['NONE', abs(units), 'close'],
+                       'NONESELL': ['SELL', unit_amt, 'open'],
+                       'BUYSELL': ['NONE', abs(units), 'close']}
         
         self.logger.info(f'Order spec: {action_dict[mod_string]}')
         

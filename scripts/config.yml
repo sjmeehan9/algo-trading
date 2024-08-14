@@ -5,7 +5,7 @@ account_number: DU8392034
 pipeline: pipeline_0001
 log_path: logs/
 data_path: data/
-task_selection: task2
+task_selection: task3
 
 # Settings for task 1
 date_list:
@@ -32,7 +32,7 @@ training_date_list:
 
 # Settings for task 3
 stream_data: real
-trading_model: ppo_x
+trading_model: ppo_y
 
 # Settings for task 4
 backtest_model: ppo_x
