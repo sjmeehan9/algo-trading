@@ -7,10 +7,11 @@ from threading import Timer, Thread
 from ..models.predict import Predict
 from .order import OrderManager
 from .payload import Payload
+from .tools import TradingTools
 
 class Trading(EWrapper, EClient):
     ELIGABLE_STREAM = 'real'
-    BASE_SECONDS = 180
+    BASE_SECONDS = 120
     TRADE_TIMER = 4
     CURRENT_POS_LIST = []
     ACTIONS = {0: 'NONE', 1: 'BUY', 2: 'SELL', 'NONE': 0, 'BUY': 1, 'SELL': 2}
@@ -25,6 +26,7 @@ class Trading(EWrapper, EClient):
 
         self.predict = Predict(self.config, self.pipeline)
         self.order = OrderManager(self.config, self.pipeline)
+        self.tools = TradingTools(self.pipeline)
         self.payload = Payload()
         self.payload.action_dict = self.ACTIONS
 
@@ -107,7 +109,7 @@ class Trading(EWrapper, EClient):
             self.timing.start()
             self.timer = True
 
-            self.logger.info(f'NONE, {self.payload.active_pos}, {self.payload.last_pos}, {self.payload.last_price}')
+            self.logger.info(f'PEND, {self.payload.active_pos}, {self.payload.last_pos}, {self.payload.last_price}')
             
         elif (status == 'PreSubmitted' or status == 'Submitted') and filled > 0 and self.payload.order_spec[2] == 'open':
             self.payload.last_price = avgFillPrice
@@ -144,16 +146,18 @@ class Trading(EWrapper, EClient):
     def tradingAlgorithm(self, state: dict) -> None:
         self.logger.info(f'Pre action payload: {self.payload}')
 
-        action, _ = self.predict.get_action(state)
-
-        self.payload.action_int = action.item()
-        self.payload.action_str = self.payload.action_dict[self.payload.action_int]
-
-        self.logger.info(f'action: {self.payload.action_str}, model prediction: {self.payload.action_int}')
-
         if self.payload.release_trade == True:
             self.payload.active_pos = self.payload.last_pos
             self.payload.release_trade = False
+
+        action, _ = self.predict.get_action(state)
+
+        self.payload.action_int = action.item()
+        self.payload.action_int = self.tools.stop_take(self.payload.action_int, state)
+
+        self.payload.action_str = self.payload.action_dict[self.payload.action_int]
+
+        self.logger.info(f'action taken: {self.payload.action_str}, model prediction: {action.item()}')
 
         take_action = self.order.checkAction(self.payload.action_str, self.payload.active_pos)
 

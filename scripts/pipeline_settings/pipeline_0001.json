@@ -17,7 +17,16 @@
     },
     "trading_config": {
       "order_type": "MKT",
-      "balance_multiplier": 0.9
+      "balance_multiplier": 0.9,
+      "stop_take": {
+        "enabled": true,
+        "takeover_mode": true,
+        "stop_loss_limit": -0.3,
+        "take_profit_rolling": 0.4,
+        "take_profit_floor": 0.2,
+        "profit_key": "trade_change",
+        "position_key": "current_position"
+      }
     },
     "historical_data_config": {
       "columns": [
@@ -65,7 +74,8 @@
         "count": [false, true]
       },
       "file_trim": 0.038,
-      "past_events": 60
+      "past_events": 60,
+      "scaler": "MinMaxScaler"
     },
     "model": {
       "pipeline_type": "rl",

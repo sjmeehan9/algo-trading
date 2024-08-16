@@ -2,6 +2,7 @@ from gymnasium import Env
 from gymnasium.spaces import Box, Dict, Discrete
 import logging
 import numpy as np
+from ..trading.tools import TradingTools
 
 class TradingEnv(Env):
     DEFAULT_SPACE_MIN = 0
@@ -20,6 +21,9 @@ class TradingEnv(Env):
 
         # Observation space
         self.observation_space = self._create_obs_space()
+
+        # Trading rules that impact the environment
+        self.tools = TradingTools(self.state_builder.pipeline)
 
 
     def _create_obs_space(self) -> None:
@@ -54,6 +58,8 @@ class TradingEnv(Env):
 
     def step(self, action: int) -> tuple:
         self.logger.info('step taken')
+
+        action = self.tools.stop_take(action, self.state_builder.state)
         
         self.state_builder.state_step(action)
 

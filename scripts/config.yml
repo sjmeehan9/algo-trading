@@ -19,8 +19,8 @@ date_list:
 
 # Settings for task 2
 data_mode: historical
-input_model: ppo_x
-save_to_file: ppo_y
+input_model: ppo_z
+save_to_file: ppo_x
 training_date_list:
   - 2022-03-01
   - 2022-03-02
@@ -31,7 +31,7 @@ training_date_list:
   - 2022-03-07
 
 # Settings for task 3
-stream_data: real
+stream_data: fake
 trading_model: ppo_y
 
 # Settings for task 4
