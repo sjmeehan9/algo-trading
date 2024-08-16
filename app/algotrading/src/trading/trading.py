@@ -133,7 +133,7 @@ class Trading(EWrapper, EClient):
         self.logger.info(f'order cancelled: {orderId}, {self.payload.active_pos}')
 
         if '_PEND' in self.payload.active_pos or '_PART' in self.payload.active_pos:
-            self.cancelOrder(orderId)
+            self.cancelOrder(orderId, '')
             self.timer = False
 
             if '_PEND' in self.payload.active_pos:
