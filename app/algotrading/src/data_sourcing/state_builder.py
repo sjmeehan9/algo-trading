@@ -3,20 +3,21 @@ import logging
 import numpy as np
 import os
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
-from ..trading.trading import Trading
+from ..data_processing.scalers import Scaler
 from ..reward_functions.reward import reward_factory
+from ..trading.trading import Trading
 
 class StateBuilder:
     START_DATEPART = -4
     END_DATEPART = -8
-    SCALER = MinMaxScaler()
 
     def __init__(self, config: dict, pipeline: dict):
         self.logger = logging.getLogger(__name__)
 
         self.config = config
         self.pipeline = pipeline
+
+        self.scaler = Scaler(self.pipeline).scaler_factory()
 
         self.initialise_counters()
 
@@ -171,7 +172,7 @@ class StateBuilder:
         if self.scale_columns:
             temp_dataframe = self.state_df[self.scale_columns]
 
-            scaled_data = self.SCALER.fit_transform(temp_dataframe)
+            scaled_data = self.scaler.fit_transform(temp_dataframe)
 
             temp_dataframe = pd.DataFrame(scaled_data, columns=self.scale_columns)
 
@@ -216,7 +217,7 @@ class StateBuilder:
         if self.scale_columns:
             temp_dataframe = self.state_df[self.scale_columns]
 
-            scaled_data = self.SCALER.fit_transform(temp_dataframe)
+            scaled_data = self.scaler.fit_transform(temp_dataframe)
 
             temp_dataframe = pd.DataFrame(scaled_data, columns=self.scale_columns)
 
@@ -310,7 +311,7 @@ class StateBuilder:
         if self.scale_columns:
             temp_dataframe = self.state_df[self.scale_columns]
 
-            scaled_data = self.SCALER.fit_transform(temp_dataframe)
+            scaled_data = self.scaler.fit_transform(temp_dataframe)
 
             temp_dataframe = pd.DataFrame(scaled_data, columns=self.scale_columns)
 
