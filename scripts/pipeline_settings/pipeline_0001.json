@@ -82,6 +82,8 @@
       "model_type": "ppo",
       "model_policy": "MultiInputPolicy",
       "model_reward": "profit_seeker",
+      "reward_wrapper_filename": "reward",
+      "reward_wrapper_path": "/custom_functions/",
       "file_extension": ".zip",
       "replay_buffer_extension": "_replay_buffer.pkl",
       "model_config": {

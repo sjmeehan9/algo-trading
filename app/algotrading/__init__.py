@@ -13,6 +13,8 @@ from .src.models.predict import Predict
 from .src.models.train_ml import TrainML
 from .src.models.train_rl import TrainRL
 from .src.reward_functions.profit_seeker import ProfitSeeker
+from .src.reward_functions.reward import reward_factory
+from .src.reward_functions.reward_wrapper import wrapper_function
 from .src.trading.financials import Financials
 from .src.trading.order import OrderManager
 from .src.trading.payload import Payload
