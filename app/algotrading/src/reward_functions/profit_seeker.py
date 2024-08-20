@@ -3,6 +3,7 @@ import math
 import numpy as np
 import pandas as pd
 import warnings
+from .reward_wrapper import wrapper_function
 from ..trading.financials import Financials
 from ..trading.payload import Payload
 
@@ -254,6 +255,7 @@ class ProfitSeeker(Financials):
         return reward_variable_dict
     
 
+    @wrapper_function
     def calculate_reward(self, state: dict) -> float:
         base_reward = 0
 
