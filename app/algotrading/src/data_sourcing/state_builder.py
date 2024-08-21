@@ -17,8 +17,6 @@ class StateBuilder:
         self.config = config
         self.pipeline = pipeline
 
-        self.scaler = Scaler(self.pipeline).scaler_factory()
-
         self.initialise_counters()
 
         self.live_data_function = self.initialise_live_data()
@@ -170,6 +168,8 @@ class StateBuilder:
         
         # If scale_columns list not empty, append to a temp dataframe
         if self.scale_columns:
+            self.scaler = Scaler(self.pipeline).scaler_factory()
+
             temp_dataframe = self.state_df[self.scale_columns]
 
             scaled_data = self.scaler.fit_transform(temp_dataframe)
