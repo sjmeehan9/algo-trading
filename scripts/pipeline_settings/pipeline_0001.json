@@ -20,7 +20,7 @@
       "balance_multiplier": 0.9,
       "stop_take": {
         "enabled": true,
-        "takeover_mode": true,
+        "takeover_mode": false,
         "stop_loss_limit": -0.3,
         "take_profit_rolling": 0.4,
         "take_profit_floor": 0.2,
