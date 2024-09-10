@@ -164,7 +164,7 @@ class TrainRL:
 
         # Load input model or create new model
         if os.path.exists(self.path_dict['input_filepath']):
-            self.model = DQN.load(self.path_dict['input_filepath'], self.env)
+            self.model = DQN.load(self.path_dict['input_filepath'], **model_kwargs)
             self.logger.info(f'Loaded DQN model from {self.path_dict["input_filepath"]}')
 
             replay_buffer_filepath = os.path.join(self.path_dict['pipeline_data_path'], self.model_input + replay_buffer_ext)
@@ -203,7 +203,7 @@ class TrainRL:
 
         # Load input model or create new model
         if os.path.exists(self.path_dict['input_filepath']):
-            self.model = PPO.load(self.path_dict['input_filepath'], self.env)
+            self.model = PPO.load(self.path_dict['input_filepath'], **model_kwargs)
             self.logger.info(f'Loaded PPO model from {self.path_dict["input_filepath"]}')
         else:
             self.model = PPO(**model_kwargs)
