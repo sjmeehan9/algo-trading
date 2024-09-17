@@ -33,6 +33,8 @@ account.
 
 As mentioned previously, algo-trading provides functionality to build trading strategies using reinforcement learning, to be deployed using an Interactive Brokers paper or cash account. Therefore an Interactive Brokers account and market data subscriptions are required to use this package. The market data subscriptions recommended for US stock market data are below, which are a monthly expense that also requires a capital minimum of around $700 AUD in your account to subscribe. Once set up you can request the paper account at no additional cost.
 
+Ensure you download and install the [TWS Desktop](https://www.interactivebrokers.com.au/en/trading/tws.php#tws-software) application to your machine, and [TWS API](https://interactivebrokers.github.io/#) to your virtual environment
+
 #### Recommended market data subscriptions
 
 - US Securities Snapshot and Futures Value Bundle (NP,L1)
