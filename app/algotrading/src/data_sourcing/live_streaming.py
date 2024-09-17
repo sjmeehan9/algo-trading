@@ -12,7 +12,7 @@ class LiveData(EWrapper, EClient):
     CONFIG_FILENAME = 'live_streaming.yml'
     HISTORICAL_CONFIG = 'historical_data.yml'
     CURRENT_BAR = ''
-    BASE_SECONDS = 120
+    BASE_SECONDS = 600
     INIT_REQUEST_ID = 1000
     DATE_COLUMN = 'date'
 

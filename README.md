@@ -59,15 +59,16 @@ your paper or cash account
 1. Install the package `pip install .`
 1. Run the main script `python scripts/main.py`
 
-*Ensure the TWS application is running on your local machine when running tasks 1 and 3*
-
 ## Usage
 
-Provided in the `scripts/` sample folder are the two types of configuration files needed to run an algo-trading task. `config.yml` contains settings such as task_selection, that could be modified each time a new task instance is run. The `pipeline_settings/` pipeline json files are allocated by `config.yml`, and act as project settings that are more enduring to the strategies you are testing for a particular stock. 
-
-Contact me if you would like an explanation around the role of these files.
+Provided in the `scripts/` sample folder are the two types of configuration files needed to run an algo-trading task. `config.yml` contains settings such as task_selection, that could be modified each time a new task instance is run. The `pipeline_settings/` pipeline json files are allocated by `config.yml`, and act as project settings that are more enduring to the strategies you are testing for a particular stock.
 
 Adjust the `config.yml` and pipeline json file settings, make the task selection and run main.py
+
+- Ensure the TWS application is running on your local machine when running tasks 1 and 3
+- By default, live_streaming.py and trading.py are set to run for 10 minutes, adjust the BASE_SECONDS variable and reinstall to change
+
+Contact me if you would like an explanation of the project, and help to scale any of the functionality.
 
 ### Project Overview
 

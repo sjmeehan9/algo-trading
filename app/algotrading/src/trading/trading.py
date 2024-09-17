@@ -11,7 +11,7 @@ from .tools import TradingTools
 
 class Trading(EWrapper, EClient):
     ELIGABLE_STREAM = 'real'
-    BASE_SECONDS = 120
+    BASE_SECONDS = 600
     TRADE_TIMER = 4
     CURRENT_POS_LIST = []
     ACTIONS = {0: 'NONE', 1: 'BUY', 2: 'SELL', 'NONE': 0, 'BUY': 1, 'SELL': 2}
