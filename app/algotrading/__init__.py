@@ -9,6 +9,7 @@ from .src.envs.trading_env import TradingEnv
 from .src.initialise import init_task, init_pipeline, task_options
 from .src.load_config import config_loader, pipeline_loader
 from .src.log_setup import setup_logger
+from .src.models.backtest import BackTest
 from .src.models.predict import Predict
 from .src.models.train_ml import TrainML
 from .src.models.train_rl import TrainRL

@@ -2,6 +2,7 @@
   "pipeline": {
     "filename": "pipeline_0001",
     "description": "Basic RL model for AMD NASDAQ stock",
+    "pipeline_type": "rl",
     "client_id": {
       "historical": 0,
       "live": 1,
@@ -78,7 +79,6 @@
       "scaler": "MinMaxScaler"
     },
     "model": {
-      "pipeline_type": "rl",
       "model_type": "ppo",
       "model_policy": "MultiInputPolicy",
       "model_reward": "profit_seeker",
