@@ -3,15 +3,15 @@ import math
 import numpy as np
 import pandas as pd
 import warnings
-from .reward_wrapper import wrapper_function
+from .reward_wrapper import reward_wrapper_function
 from ..trading.financials import Financials
 from ..trading.payload import Payload
 
 class ProfitSeeker(Financials):
     CUSTOM_VARIABLES = {
         'current_position': [0, 2, np.int64],
-        'trade_change': [-10000, 10000, np.float64],
-        'running_profit': [-10000, 10000, np.float64]
+        'trade_change': [-100000, 100000, np.float64],
+        'running_profit': [-100000, 100000, np.float64]
     }
     PRICE_PAID = 0.0
     SET_PROFIT = 0.0
@@ -26,20 +26,19 @@ class ProfitSeeker(Financials):
         self.config = config
         self.pipeline = pipeline
 
-        self.reward_step = self.task_factory(self.config['task_selection'])
+        self.step = self.task_factory(self.config['task_selection'])
 
 
     def task_factory(self, task_selection: str) -> object:
         if task_selection == 'task3':
             return self.trading_step
         else:
-            return self.training_step
+            return self.state_step
 
 
-    # Dictionary of custom reward variables set to initial values
-    def initial_reward_variables(self) -> dict:
-        reward_variables = {k: 0 for k in self.CUSTOM_VARIABLES.keys()}
-        return reward_variables
+    def initialise_variables(self) -> dict:
+        custom_variables = {k: 0 for k in self.CUSTOM_VARIABLES.keys()}
+        return custom_variables
     
 
     def reset_env_globals(self) -> None:
@@ -73,7 +72,7 @@ class ProfitSeeker(Financials):
         return reward_variable_dict
     
 
-    def training_step(self, action: int, state_df: pd.DataFrame, reward_variable_dict: dict, terminated: bool) -> dict:
+    def state_step(self, action: int, state_df: pd.DataFrame, reward_variable_dict: dict, terminated: bool) -> dict:
         
         self.current_position = reward_variable_dict['current_position'][-1]
 
@@ -255,7 +254,7 @@ class ProfitSeeker(Financials):
         return reward_variable_dict
     
 
-    @wrapper_function
+    @reward_wrapper_function
     def calculate_reward(self, state: dict) -> float:
         base_reward = 0
 

@@ -64,7 +64,7 @@
     "env_config": {
       "env_name": "trading_env"
     },
-    "model_data_config": {
+    "state_data_config": {
       "columns": {
         "date": [true, false],
         "open": [false, true],
@@ -77,6 +77,11 @@
       "file_trim": 0.038,
       "past_events": 60,
       "scaler": "MinMaxScaler"
+    },
+    "strategy": {
+      "strategy_name": "profit_metrics",
+      "strategy_wrapper_filename": "strategy_logic",
+      "strategy_wrapper_path": "/custom_functions/"
     },
     "model": {
       "model_type": "ppo",

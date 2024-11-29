@@ -6,6 +6,7 @@ from .src.data_sourcing.state_builder import StateBuilder
 from .src.data_sourcing.stream_faker import StreamFaker
 from .src.data_sourcing.stream_queue import StreamQueue
 from .src.envs.trading_env import TradingEnv
+from .src.envs.strategy_env import StrategyEnv
 from .src.initialise import init_task, init_pipeline, task_options
 from .src.load_config import config_loader, pipeline_loader
 from .src.log_setup import setup_logger
@@ -15,7 +16,11 @@ from .src.models.train_ml import TrainML
 from .src.models.train_rl import TrainRL
 from .src.reward_functions.profit_seeker import ProfitSeeker
 from .src.reward_functions.reward import reward_factory
-from .src.reward_functions.reward_wrapper import wrapper_function
+from .src.reward_functions.reward_wrapper import reward_wrapper_function
+from .src.strategies.custom_logic import custom_logic_factory
+from .src.strategies.profit_metrics import ProfitMetrics
+from .src.strategies.strategy import Strategy
+from .src.strategies.strategy_wrapper import strategy_wrapper_function
 from .src.trading.financials import Financials
 from .src.trading.order import OrderManager
 from .src.trading.payload import Payload

@@ -12,7 +12,7 @@ class StreamQueue:
         self.config = config
         self.pipeline = pipeline
 
-        self.buffer_size = self.pipeline['pipeline']['model_data_config']['past_events']
+        self.buffer_size = self.pipeline['pipeline']['state_data_config']['past_events']
         self.pipeline_type = self.pipeline['pipeline']['pipeline_type']
 
         self.queue = pd.DataFrame()

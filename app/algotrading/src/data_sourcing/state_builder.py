@@ -48,7 +48,7 @@ class StateBuilder:
                     self.logger.error('No date string found in filename')
                     continue
 
-        file_trim = self.pipeline['pipeline']['model_data_config']['file_trim']
+        file_trim = self.pipeline['pipeline']['state_data_config']['file_trim']
 
         contract_info = self.pipeline['pipeline']['contract_info']
 
@@ -89,12 +89,12 @@ class StateBuilder:
                 self.logger.info(f'Error reading {filename}: {e}')
                 continue
 
-        self.episode_length = len(current_df) - self.pipeline['pipeline']['model_data_config']['past_events']
+        self.episode_length = len(current_df) - self.pipeline['pipeline']['state_data_config']['past_events']
 
         self.total_timesteps = len(self.master_date_list) * self.episode_length
         
-        if self.pipeline['pipeline']['model_data_config']['columns']:
-            columns_keys = list(self.pipeline['pipeline']['model_data_config']['columns'].keys())
+        if self.pipeline['pipeline']['state_data_config']['columns']:
+            columns_keys = list(self.pipeline['pipeline']['state_data_config']['columns'].keys())
             self.final_dataframe = self.final_dataframe[columns_keys]
         
         return None
@@ -136,9 +136,9 @@ class StateBuilder:
     def initialise_state(self, reward: object) -> None:
         self.reward = reward
 
-        self.reward_variables = self.reward.initial_reward_variables()
+        self.reward_variables = self.reward.initialise_variables()
 
-        self.window_end = self.pipeline['pipeline']['model_data_config']['past_events']
+        self.window_end = self.pipeline['pipeline']['state_data_config']['past_events']
 
         self.task_state()
 
@@ -155,7 +155,7 @@ class StateBuilder:
         self.scale_columns = []
         self.unscaled_columns = []
 
-        for key, value in self.pipeline['pipeline']['model_data_config']['columns'].items():
+        for key, value in self.pipeline['pipeline']['state_data_config']['columns'].items():
             if value[0]==True:
                 self.key_columns.append(key)
             elif value[1]==True:
@@ -258,23 +258,24 @@ class StateBuilder:
 
     
     def initialise_live_data(self) -> object:
-        # Flag for completed initialisation
-        self.initialised = False
+        if self.config['task_selection'] == 'task2' or self.config['task_selection'] == 'task3':
+            # Flag for completed initialisation
+            self.initialised = False
 
-        # Init reward for use in live data tasks
-        reward_name = self.pipeline['pipeline']['model']['model_reward']
-        self.reward = reward_factory(reward_name, self.config, self.pipeline)
+            # Init reward for use in live data tasks
+            reward_name = self.pipeline['pipeline']['model']['model_reward']
+            self.reward = reward_factory(reward_name, self.config, self.pipeline)
 
-        # Route to the correct function based on the task selection
-        if self.config['task_selection'] == 'task2':
-            route = self.live_step
-        elif self.config['task_selection'] == 'task3':
-            self.terminated = False
+            # Route to the correct function based on the task selection
+            if self.config['task_selection'] == 'task2':
+                route = self.live_step
+            elif self.config['task_selection'] == 'task3':
+                self.terminated = False
 
-            app = Trading(self.config, self.pipeline)
-            self.trading = app
+                app = Trading(self.config, self.pipeline)
+                self.trading = app
 
-            route = self.trading_step
+                route = self.trading_step
         else:
             self.logger.error('Live data usage not supported')
             route = None

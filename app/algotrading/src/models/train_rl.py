@@ -20,9 +20,6 @@ class TrainRL:
         self.path_dict = path_dict
         self.evaluate = evaluate
 
-        # Instanciate StateBuilder object
-        self.state_builder = StateBuilder(self.config, self.pipeline)
-
         self.reward_name = self.pipeline['pipeline']['model']['model_reward']
         self.env_name = self.pipeline['pipeline']['env_config']['env_name']
         self.model_type = self.pipeline['pipeline']['model']['model_type']
@@ -219,14 +216,17 @@ class TrainRL:
 
 
     def start(self) -> None:
-        # Setup the data feed
-        self.data_setup()
-
         # Instanciate reward function object
         self.reward = reward_factory(self.reward_name, self.config, self.pipeline)
 
+        # Instanciate StateBuilder object
+        self.state_builder = StateBuilder(self.config, self.pipeline, self.reward)
+
+        # Setup the data feed
+        self.data_setup()
+
         # Contruct initial state dictionary
-        self.state_builder.initialise_state(self.reward)
+        self.state_builder.initialise_state()
 
         # Instanciate environment object
         self.env = self.env_factory(self.env_name)

@@ -1,6 +1,7 @@
 import logging
 import os
 from .train_ml import TrainML
+from ..strategies.strategy import Strategy
 
 class BackTest:
     def __init__(self, config: dict, pipeline: dict):
@@ -37,7 +38,7 @@ class BackTest:
         if pipeline_type in TrainML.ML_TYPES:
             return TrainML(self.config, self.pipeline, self.path_dict, True)
         elif pipeline_type == 'strategy':
-            raise NotImplementedError('Strategy pipeline is not yet supported')
+            return Strategy(self.config, self.pipeline, self.path_dict, True)
         else:
             self.logger.error('Pipeline type not recognised')
             raise NotImplementedError('Pipeline type not recognised')
