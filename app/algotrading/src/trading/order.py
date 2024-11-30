@@ -56,17 +56,17 @@ class OrderManager:
         return order, active_pos
 
 
-    def positionUnlock(self, active_position, balance_figure, balance_list, update_position) -> tuple:
+    def positionUnlock(self, active_position, balance_figure, balance_list) -> tuple:
         
         balance_list.append(balance_figure)
         
         if '_FILL' in active_position and len(balance_list) == 2:
-            update_reward_vars = True
+            update_state_data = True
             balance_list = []
             
         else:
-            update_reward_vars = False
+            update_state_data = False
             
-        self.logger.info(f'{update_reward_vars}, {balance_list}')
+        self.logger.info(f'{update_state_data}, {balance_list}')
         
-        return update_reward_vars, balance_list
+        return update_state_data, balance_list

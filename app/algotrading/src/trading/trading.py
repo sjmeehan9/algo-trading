@@ -84,7 +84,7 @@ class Trading(EWrapper, EClient):
             self.logger.info(f'cashbalance: {self.payload.cashbalance}')
 
             if '_FILL' in self.payload.active_pos:
-                self.payload.update_reward_vars, self.payload.current_pos_list = self.order.positionUnlock(self.payload.active_pos, self.payload.cashbalance, self.payload.current_pos_list, self.payload.order_spec[0])
+                self.payload.update_state_data, self.payload.current_pos_list = self.order.positionUnlock(self.payload.active_pos, self.payload.cashbalance, self.payload.current_pos_list)
 
     
     def updatePortfolio(self, contract: Contract, position: float, marketPrice: float, marketValue: float, averageCost: float, unrealizedPNL: float, realizedPNL: float, accountName: str) -> None:
@@ -94,7 +94,7 @@ class Trading(EWrapper, EClient):
             self.logger.info(f'openunits: {self.payload.openunits}')
             
             if '_FILL' in self.payload.active_pos:
-                self.payload.update_reward_vars, self.payload.current_pos_list = self.order.positionUnlock(self.payload.active_pos, self.payload.openunits, self.payload.current_pos_list, self.payload.order_spec[0])     
+                self.payload.update_state_data, self.payload.current_pos_list = self.order.positionUnlock(self.payload.active_pos, self.payload.openunits, self.payload.current_pos_list)
 
     
     def updateAccountTime(self, timeStamp: str) -> None:

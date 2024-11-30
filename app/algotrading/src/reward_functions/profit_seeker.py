@@ -47,7 +47,7 @@ class ProfitSeeker(Financials):
         return None
     
 
-    def trading_step(self, payload: Payload, state_df: pd.DataFrame, reward_variable_dict: dict, terminated: bool) -> dict:
+    def trading_step(self, payload: Payload, state_df: pd.DataFrame, custom_variable_dict: dict, terminated: bool) -> dict:
         if payload.update_reward_vars:
             action = payload.temp_action_int
             self.current_position = payload.action_dict[payload.previous_pos]
@@ -67,36 +67,36 @@ class ProfitSeeker(Financials):
         self.strike_buy = self.strike_price
         self.strike_sell = self.strike_price
 
-        reward_variable_dict = self.reward_variable_step(action, state_df, reward_variable_dict, terminated)
+        custom_variable_dict = self.custom_variable_step(action, state_df, custom_variable_dict, terminated)
 
-        return reward_variable_dict
+        return custom_variable_dict
     
 
-    def state_step(self, action: int, state_df: pd.DataFrame, reward_variable_dict: dict, terminated: bool) -> dict:
+    def state_step(self, action: int, state_df: pd.DataFrame, custom_variable_dict: dict, terminated: bool) -> dict:
         
-        self.current_position = reward_variable_dict['current_position'][-1]
+        self.current_position = custom_variable_dict['current_position'][-1]
 
         self.strike_price = state_df['close'].iloc[-2]
         self.strike_buy = self.strike_price / self.price_penalty
         self.strike_sell = self.strike_price * self.price_penalty
 
-        reward_variable_dict = self.reward_variable_step(action, state_df, reward_variable_dict, terminated)
+        custom_variable_dict = self.custom_variable_step(action, state_df, custom_variable_dict, terminated)
 
-        return reward_variable_dict
+        return custom_variable_dict
     
 
-    def reward_variable_step(self, action: int, state_df: pd.DataFrame, reward_variable_dict: dict, terminated: bool) -> dict:
+    def custom_variable_step(self, action: int, state_df: pd.DataFrame, custom_variable_dict: dict, terminated: bool) -> dict:
         self.determine_action_type(action, terminated)
 
-        reward_variable_dict = self.current_position_update(action, reward_variable_dict)
+        custom_variable_dict = self.current_position_update(action, custom_variable_dict)
 
         self.current_price_update(state_df)
 
-        reward_variable_dict = self.trade_change_update(reward_variable_dict)
+        custom_variable_dict = self.trade_change_update(custom_variable_dict)
 
-        reward_variable_dict = self.running_profit_update(reward_variable_dict)
+        custom_variable_dict = self.running_profit_update(custom_variable_dict)
 
-        return reward_variable_dict
+        return custom_variable_dict
     
 
     def determine_action_type(self, action: int, terminated: bool) -> None:
@@ -138,7 +138,7 @@ class ProfitSeeker(Financials):
         return None
     
 
-    def current_position_update(self, action: int, reward_variable_dict: dict) -> dict:
+    def current_position_update(self, action: int, custom_variable_dict: dict) -> dict:
 
         position_dict = {
             'hold_nothing': self.current_position,
@@ -152,11 +152,11 @@ class ProfitSeeker(Financials):
             'false_sell': self.current_position
         }
 
-        reward_variable_dict['current_position'] = np.append(reward_variable_dict['current_position'], position_dict[self.action_type])
+        custom_variable_dict['current_position'] = np.append(custom_variable_dict['current_position'], position_dict[self.action_type])
 
         self.logger.info(f'new current position: {position_dict[self.action_type]}')
 
-        return reward_variable_dict
+        return custom_variable_dict
     
 
     def set_current_prices(self, state_df: pd.DataFrame) -> None:
@@ -193,7 +193,7 @@ class ProfitSeeker(Financials):
         return None
     
     
-    def trade_change_update(self, reward_variable_dict: dict) -> dict:
+    def trade_change_update(self, custom_variable_dict: dict) -> dict:
         price_dict = {
             'hold_nothing': 0.0,
             'hold_long_position': (self.new_sell / self.price_paid_buy - 1) * 100,
@@ -206,18 +206,18 @@ class ProfitSeeker(Financials):
             'false_sell': (self.price_paid_sell / self.new_buy - 1) * 100
         }
 
-        reward_variable_dict['trade_change'] = np.append(reward_variable_dict['trade_change'], price_dict[self.action_type])
+        custom_variable_dict['trade_change'] = np.append(custom_variable_dict['trade_change'], price_dict[self.action_type])
 
         self.logger.info(f'trade change: {price_dict[self.action_type]}')
 
-        return reward_variable_dict
+        return custom_variable_dict
     
 
-    def running_profit_update(self, reward_variable_dict: dict) -> dict:
-        session_profit = reward_variable_dict['running_profit'][-1]
+    def running_profit_update(self, custom_variable_dict: dict) -> dict:
+        session_profit = custom_variable_dict['running_profit'][-1]
         local_profit = self.SET_PROFIT
-        trade_change = reward_variable_dict['trade_change'][-1]
-        last_trade_change = reward_variable_dict['trade_change'][-2]
+        trade_change = custom_variable_dict['trade_change'][-1]
+        last_trade_change = custom_variable_dict['trade_change'][-2]
 
         set_profit_dict = {
             'hold_nothing': local_profit,
@@ -247,11 +247,11 @@ class ProfitSeeker(Financials):
 
         state_update = state_update_dict[self.action_type]
 
-        reward_variable_dict['running_profit'] = np.append(reward_variable_dict['running_profit'], state_update)
+        custom_variable_dict['running_profit'] = np.append(custom_variable_dict['running_profit'], state_update)
 
         self.logger.info(f'running profit: {state_update}')
 
-        return reward_variable_dict
+        return custom_variable_dict
     
 
     @reward_wrapper_function
