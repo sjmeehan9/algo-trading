@@ -337,6 +337,8 @@ class StateBuilder:
 
         self.logger.info(f'state updated: {self.state}')
 
+        self.trading.updateState()
+
         # Sent state to trading_algorithm
         self.trading.tradingAlgorithm(self.state)
 

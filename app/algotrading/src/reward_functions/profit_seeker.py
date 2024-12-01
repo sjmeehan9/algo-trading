@@ -48,12 +48,10 @@ class ProfitSeeker(Financials):
     
 
     def trading_step(self, payload: Payload, state_df: pd.DataFrame, custom_variable_dict: dict, terminated: bool) -> dict:
-        if payload.update_reward_vars:
+        if payload.update_state_data:
             action = payload.temp_action_int
             self.current_position = payload.action_dict[payload.previous_pos]
             self.strike_price = payload.last_price
-            payload.release_trade = True
-            payload.update_reward_vars = False
         elif '_' in payload.active_pos:
             action = 0
             self.current_position = payload.action_dict[payload.previous_pos]
@@ -63,7 +61,6 @@ class ProfitSeeker(Financials):
             self.current_position = payload.action_dict[payload.active_pos]
             self.strike_price = state_df['close'].iloc[-2]
 
-        payload.live_price = state_df['close'].iloc[-1]
         self.strike_buy = self.strike_price
         self.strike_sell = self.strike_price
 

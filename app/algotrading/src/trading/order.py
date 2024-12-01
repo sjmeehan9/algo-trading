@@ -9,6 +9,7 @@ class OrderManager:
         self.pipeline = pipeline
 
         self.order_type = self.pipeline['pipeline']['trading_config']['order_type']
+        self.contract_price = self.pipeline['pipeline']['trading_config']['price_key']
         self.balance_multiplier = self.pipeline['pipeline']['trading_config']['balance_multiplier']
 
 
@@ -18,6 +19,12 @@ class OrderManager:
             return True
         else:
             return False
+
+
+    def priceAction(self, state: dict) -> float:
+        price = state[self.contract_price][-1]
+
+        return price
         
 
     def calcOrderSpec(self, balance, units, action, activePos, price) -> list:

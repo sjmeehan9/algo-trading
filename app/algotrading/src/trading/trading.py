@@ -101,6 +101,14 @@ class Trading(EWrapper, EClient):
         self.logger.info(f'Account time update: {timeStamp}')
 
 
+    def updateState(self) -> None:
+        if self.payload.update_state_data:
+            self.payload.release_trade = True
+            self.payload.update_state_data = False
+
+        return None
+
+
     def orderStatus(self, orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId, whyHeld, mktCapPrice) -> None:
         self.logger.info(f'OrderStatus. Id: {orderId}, Status: {status}, {filled}, {remaining}, {avgFillPrice}, {permId}, {parentId}, {lastFillPrice}, {clientId}, {whyHeld}, {mktCapPrice}')
         
@@ -165,6 +173,7 @@ class Trading(EWrapper, EClient):
 
         if take_action and self.enable_trading:
             self.logger.info('Action requested')
+            self.payload.live_price = self.order.priceAction(state)
             self.executeOrder()
         else:
             self.logger.info('No action taken')
