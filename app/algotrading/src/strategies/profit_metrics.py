@@ -34,5 +34,7 @@ class ProfitMetrics(Financials):
 
 
     @strategy_wrapper_function
-    def predict(self, state: dict) -> int:
-        return 0
+    def predict(self, state: dict) -> tuple:
+        action = 0
+        _states = state
+        return action, _states

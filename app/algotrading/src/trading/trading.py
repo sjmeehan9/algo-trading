@@ -101,7 +101,7 @@ class Trading(EWrapper, EClient):
         self.logger.info(f'Account time update: {timeStamp}')
 
 
-    def updateState(self) -> None:
+    def confirmTrades(self) -> None:
         if self.payload.update_state_data:
             self.payload.release_trade = True
             self.payload.update_state_data = False

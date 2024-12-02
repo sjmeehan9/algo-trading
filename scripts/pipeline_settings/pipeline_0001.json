@@ -23,9 +23,9 @@
       "stop_take": {
         "enabled": true,
         "takeover_mode": false,
-        "stop_loss_limit": -0.3,
-        "take_profit_rolling": 0.4,
-        "take_profit_floor": 0.2,
+        "stop_loss_limit": -0.15,
+        "take_profit_rolling": 0.30,
+        "take_profit_floor": 0.15,
         "profit_key": "trade_change",
         "position_key": "current_position"
       }
