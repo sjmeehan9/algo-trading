@@ -5,7 +5,6 @@ from ..utils import write_audit_json
 
 class TrainML:
     AUDIT_FILENAME = 'training_sessions.json'
-    ML_TYPES = ['rl']
 
     def __init__(self, config: dict, pipeline: dict, input_paths: dict = {}, evaluate: bool = False):
         self.logger = logging.getLogger(__name__)

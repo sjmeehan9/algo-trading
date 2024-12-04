@@ -1,10 +1,12 @@
 import logging
 import os
 from stable_baselines3 import PPO, DQN
-from .train_ml import TrainML
 from ..strategies.custom_logic import custom_logic_factory
+from ..utils import pipeline_type_config
 
 class Predict:
+    CONFIG_FILENAME = 'pipeline_types.yml'
+
     def __init__(self, config: dict, pipeline: dict):
         self.logger = logging.getLogger(__name__)
 
@@ -13,14 +15,16 @@ class Predict:
 
         self.pipeline_type = self.pipeline['pipeline']['pipeline_type']
 
+        self.pipeline_type_dict = pipeline_type_config(self.CONFIG_FILENAME)
+
         self.predictor = self.client(self.pipeline_type)
 
 
     def client(self, pipeline_type: str) -> object:
-        if pipeline_type in TrainML.ML_TYPES:
+        if pipeline_type in self.pipeline_type_dict['pipeline_type']['ml']:
             predictor = self.load_model()
             return predictor
-        elif pipeline_type == 'strategy':
+        elif pipeline_type in self.pipeline_type_dict['pipeline_type']['strategies']:
             predictor = self.load_strategy()
             return predictor
         else:

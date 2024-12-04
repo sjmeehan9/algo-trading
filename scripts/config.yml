@@ -5,7 +5,7 @@ account_number: DU1234567
 pipeline: pipeline_0001
 log_path: logs/
 data_path: data/
-task_selection: task1
+task_selection: task4
 
 # Settings for task 1
 date_list:
@@ -16,8 +16,8 @@ date_list:
 
 # Settings for task 2
 data_mode: historical
-input_model: ppo_z
-save_to_file: ppo_x
+input_model: ppo_1
+save_to_file: ppo_1
 training_date_list:
   - 2024-11-21
   - 2024-11-22
@@ -28,6 +28,6 @@ stream_data: real
 trading_model: ppo_x
 
 # Settings for task 4
-backtest_model: ppo_x
+backtest_model: ppo_1
 backtest_date_list:
   - 2022-01-03

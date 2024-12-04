@@ -1,9 +1,12 @@
 import logging
 import os
-from .train_ml import TrainML
 from ..strategies.strategy import Strategy
+from .train_ml import TrainML
+from ..utils import pipeline_type_config
 
 class BackTest:
+    CONFIG_FILENAME = 'pipeline_types.yml'
+
     def __init__(self, config: dict, pipeline: dict):
         self.logger = logging.getLogger(__name__)
 
@@ -11,6 +14,8 @@ class BackTest:
         self.pipeline = pipeline
 
         self.pipeline_type = self.pipeline['pipeline']['pipeline_type']
+
+        self.pipeline_type_dict = pipeline_type_config(self.CONFIG_FILENAME)
 
         self.path_dict = self._path_setup()
 
@@ -22,6 +27,7 @@ class BackTest:
         backtest_data_path = os.path.join(data_path, 'backtest/')
         path_dict['backtest_data_path'] = backtest_data_path
 
+        self.pipeline_name = self.pipeline['pipeline']['filename']
         pipeline_backtest_path = os.path.join(backtest_data_path, f'{self.pipeline_name}/')
         path_dict['pipeline_backtest_path'] = pipeline_backtest_path
 
@@ -35,9 +41,9 @@ class BackTest:
 
 
     def client(self, pipeline_type: str) -> object:
-        if pipeline_type in TrainML.ML_TYPES:
+        if pipeline_type in self.pipeline_type_dict['pipeline_type']['ml']:
             return TrainML(self.config, self.pipeline, self.path_dict, True)
-        elif pipeline_type == 'strategy':
+        elif pipeline_type in self.pipeline_type_dict['pipeline_type']['strategies']:
             return Strategy(self.config, self.pipeline, self.path_dict, True)
         else:
             self.logger.error('Pipeline type not recognised')
