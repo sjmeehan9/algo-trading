@@ -1,5 +1,6 @@
 import logging
 from ibapi.order import Order
+import pandas as pd
 
 class OrderManager:
     def __init__(self, config: dict, pipeline: dict):
@@ -21,8 +22,8 @@ class OrderManager:
             return False
 
 
-    def priceAction(self, state: dict) -> float:
-        price = state[self.contract_price][-1]
+    def priceAction(self, state_df: pd.DataFrame) -> float:
+        price = state_df[self.contract_price].iloc[-1]
 
         return price
         

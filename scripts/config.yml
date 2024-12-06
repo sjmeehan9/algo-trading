@@ -2,10 +2,10 @@
 ip_address: 127.0.0.1
 port: 7497
 account_number: DU1234567
-pipeline: pipeline_0001
+pipeline: pipeline_0002
 log_path: logs/
 data_path: data/
-task_selection: task4
+task_selection: task3
 
 # Settings for task 1
 date_list:
@@ -25,7 +25,7 @@ training_date_list:
 
 # Settings for task 3
 stream_data: real
-trading_model: ppo_x
+trading_model: ppo_1
 
 # Settings for task 4
 backtest_model: ppo_1

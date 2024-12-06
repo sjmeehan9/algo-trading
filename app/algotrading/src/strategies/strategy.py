@@ -34,7 +34,7 @@ class Strategy:
 
 
     def env_factory(self, env_name: str) -> object:
-        if env_name == 'trading_env':
+        if env_name == 'strategy_env':
             env = StrategyEnv(self.state_builder)
             try:
                 check_env(env)
@@ -103,7 +103,7 @@ class Strategy:
         self.data_setup()
 
         # Contruct initial state dictionary
-        self.state_builder.initialise_state(self.custom_logic)
+        self.state_builder.initialise_state()
 
         # Instanciate environment object
         self.env = self.env_factory(self.env_name)

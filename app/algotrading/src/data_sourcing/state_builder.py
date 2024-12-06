@@ -340,7 +340,7 @@ class StateBuilder:
         self.trading.confirmTrades()
 
         # Sent state to trading_algorithm
-        self.trading.tradingAlgorithm(self.state)
+        self.trading.tradingAlgorithm(self.state, self.state_df)
 
         return None
 
