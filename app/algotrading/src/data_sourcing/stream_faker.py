@@ -44,7 +44,7 @@ class StreamFaker:
                 self.logger.error('No date string found in filename')
                 continue
 
-        file_trim = self.pipeline['pipeline']['model_data_config']['file_trim']
+        file_trim = self.pipeline['pipeline']['state_data_config']['file_trim']
 
         contract_info = self.pipeline['pipeline']['contract_info']
 
@@ -75,7 +75,7 @@ class StreamFaker:
             self.logger.info(f'Error reading {filename}: {e}')
             raise e
 
-        self.episode_length = len(self.final_dataframe) - self.pipeline['pipeline']['model_data_config']['past_events']
+        self.episode_length = len(self.final_dataframe) - self.pipeline['pipeline']['state_data_config']['past_events']
         
         return None
     

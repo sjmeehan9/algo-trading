@@ -11,7 +11,7 @@ class Payload:
     previous_pos: str = field(default='NONE')
     order_spec: list = field(default_factory=list)
     current_pos_list: list = field(default_factory=list)
-    update_reward_vars: bool = field(default=False)
+    update_state_data: bool = field(default=False)
     release_trade: bool = field(default=False)
     action_int: int = field(default=0)
     action_str: str = field(default='NONE')

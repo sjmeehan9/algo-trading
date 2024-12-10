@@ -3,6 +3,7 @@ import logging
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
+import pandas as pd
 from threading import Timer, Thread
 from ..models.predict import Predict
 from .order import OrderManager
@@ -11,7 +12,6 @@ from .tools import TradingTools
 
 class Trading(EWrapper, EClient):
     ELIGABLE_STREAM = 'real'
-    BASE_SECONDS = 600
     TRADE_TIMER = 4
     CURRENT_POS_LIST = []
     ACTIONS = {0: 'NONE', 1: 'BUY', 2: 'SELL', 'NONE': 0, 'BUY': 1, 'SELL': 2}
@@ -73,7 +73,8 @@ class Trading(EWrapper, EClient):
 
     
     def setTimer(self) -> int:
-        return self.BASE_SECONDS
+        runtime = self.pipeline['pipeline']['live_data_config']['runtime']
+        return runtime
     
 
     # Account data updates
@@ -84,7 +85,7 @@ class Trading(EWrapper, EClient):
             self.logger.info(f'cashbalance: {self.payload.cashbalance}')
 
             if '_FILL' in self.payload.active_pos:
-                self.payload.update_reward_vars, self.payload.current_pos_list = self.order.positionUnlock(self.payload.active_pos, self.payload.cashbalance, self.payload.current_pos_list, self.payload.order_spec[0])
+                self.payload.update_state_data, self.payload.current_pos_list = self.order.positionUnlock(self.payload.active_pos, self.payload.cashbalance, self.payload.current_pos_list)
 
     
     def updatePortfolio(self, contract: Contract, position: float, marketPrice: float, marketValue: float, averageCost: float, unrealizedPNL: float, realizedPNL: float, accountName: str) -> None:
@@ -94,11 +95,19 @@ class Trading(EWrapper, EClient):
             self.logger.info(f'openunits: {self.payload.openunits}')
             
             if '_FILL' in self.payload.active_pos:
-                self.payload.update_reward_vars, self.payload.current_pos_list = self.order.positionUnlock(self.payload.active_pos, self.payload.openunits, self.payload.current_pos_list, self.payload.order_spec[0])     
+                self.payload.update_state_data, self.payload.current_pos_list = self.order.positionUnlock(self.payload.active_pos, self.payload.openunits, self.payload.current_pos_list)
 
     
     def updateAccountTime(self, timeStamp: str) -> None:
         self.logger.info(f'Account time update: {timeStamp}')
+
+
+    def confirmTrades(self) -> None:
+        if self.payload.update_state_data:
+            self.payload.release_trade = True
+            self.payload.update_state_data = False
+
+        return None
 
 
     def orderStatus(self, orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId, whyHeld, mktCapPrice) -> None:
@@ -143,7 +152,7 @@ class Trading(EWrapper, EClient):
                 self.payload.active_pos = '{}_FILL'.format(self.payload.temp_action)
         
 
-    def tradingAlgorithm(self, state: dict) -> None:
+    def tradingAlgorithm(self, state: dict, state_df: pd.DataFrame) -> None:
         self.logger.info(f'Pre action payload: {self.payload}')
 
         if self.payload.release_trade == True:
@@ -157,7 +166,7 @@ class Trading(EWrapper, EClient):
 
         self.payload.action_str = self.payload.action_dict[self.payload.action_int]
 
-        self.logger.info(f'action taken: {self.payload.action_str}, model prediction: {action.item()}')
+        self.logger.info(f'action taken: {self.payload.action_str}, prediction: {action.item()}')
 
         take_action = self.order.checkAction(self.payload.action_str, self.payload.active_pos)
 
@@ -165,6 +174,7 @@ class Trading(EWrapper, EClient):
 
         if take_action and self.enable_trading:
             self.logger.info('Action requested')
+            self.payload.live_price = self.order.priceAction(state_df)
             self.executeOrder()
         else:
             self.logger.info('No action taken')

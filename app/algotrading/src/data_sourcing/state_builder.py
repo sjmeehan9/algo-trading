@@ -4,18 +4,18 @@ import numpy as np
 import os
 import pandas as pd
 from ..data_processing.scalers import Scaler
-from ..reward_functions.reward import reward_factory
 from ..trading.trading import Trading
 
 class StateBuilder:
     START_DATEPART = -4
     END_DATEPART = -8
 
-    def __init__(self, config: dict, pipeline: dict):
+    def __init__(self, config: dict, pipeline: dict, custom_logic: object):
         self.logger = logging.getLogger(__name__)
 
         self.config = config
         self.pipeline = pipeline
+        self.custom_logic = custom_logic
 
         self.initialise_counters()
 
@@ -48,7 +48,7 @@ class StateBuilder:
                     self.logger.error('No date string found in filename')
                     continue
 
-        file_trim = self.pipeline['pipeline']['model_data_config']['file_trim']
+        file_trim = self.pipeline['pipeline']['state_data_config']['file_trim']
 
         contract_info = self.pipeline['pipeline']['contract_info']
 
@@ -89,12 +89,12 @@ class StateBuilder:
                 self.logger.info(f'Error reading {filename}: {e}')
                 continue
 
-        self.episode_length = len(current_df) - self.pipeline['pipeline']['model_data_config']['past_events']
+        self.episode_length = len(current_df) - self.pipeline['pipeline']['state_data_config']['past_events']
 
         self.total_timesteps = len(self.master_date_list) * self.episode_length
         
-        if self.pipeline['pipeline']['model_data_config']['columns']:
-            columns_keys = list(self.pipeline['pipeline']['model_data_config']['columns'].keys())
+        if self.pipeline['pipeline']['state_data_config']['columns']:
+            columns_keys = list(self.pipeline['pipeline']['state_data_config']['columns'].keys())
             self.final_dataframe = self.final_dataframe[columns_keys]
         
         return None
@@ -133,12 +133,11 @@ class StateBuilder:
         return None
 
 
-    def initialise_state(self, reward: object) -> None:
-        self.reward = reward
+    def initialise_state(self) -> None:
 
-        self.reward_variables = self.reward.initial_reward_variables()
+        self.custom_variables = self.custom_logic.initialise_variables()
 
-        self.window_end = self.pipeline['pipeline']['model_data_config']['past_events']
+        self.window_end = self.pipeline['pipeline']['state_data_config']['past_events']
 
         self.task_state()
 
@@ -155,7 +154,7 @@ class StateBuilder:
         self.scale_columns = []
         self.unscaled_columns = []
 
-        for key, value in self.pipeline['pipeline']['model_data_config']['columns'].items():
+        for key, value in self.pipeline['pipeline']['state_data_config']['columns'].items():
             if value[0]==True:
                 self.key_columns.append(key)
             elif value[1]==True:
@@ -182,9 +181,9 @@ class StateBuilder:
 
             temp_dataframe = pd.concat([temp_dataframe, unscaled_df], axis=1)
 
-        # Add the default custom reward values
-        if self.reward_variables:
-            for key, value in self.reward_variables.items():
+        # Add the default custom custom values
+        if self.custom_variables:
+            for key, value in self.custom_variables.items():
                 temp_dataframe[key] = value
 
         # store the state dictionary
@@ -226,9 +225,6 @@ class StateBuilder:
             unscaled_df = self.state_df[self.unscaled_columns].reset_index(drop=True)
 
             temp_dataframe = pd.concat([temp_dataframe, unscaled_df], axis=1)
-        
-        # For the custom variables, grab the previous step values from the last step
-        reward_variable_dict = {key: self.state[key][1:] for key, value in self.reward_variables.items()}
 
         # Check if the episode is over
         if self.state_counters['step'] == self.episode_length:
@@ -238,15 +234,18 @@ class StateBuilder:
         if self.state_counters['step'] * self.state_counters['episode'] == self.total_timesteps:
             self.timed_out = True
 
-        # Call each reward variable function to calculate the new values for the latest time
-        reward_variable_dict = self.reward.reward_step(action, self.state_df, reward_variable_dict, self.terminated)
+        # For the custom variables, grab the previous step values from the last step
+        custom_variable_dict = {key: self.state[key][1:] for key, value in self.custom_variables.items()}
+
+        # Call each custom variable function to calculate the new values for the latest time
+        custom_variable_dict = self.custom_logic.step(action, self.state_df, custom_variable_dict, self.terminated)
 
         # store the state dictionary
         self.state = temp_dataframe.to_dict(orient='list')
 
         self.state = {key: np.array(value) for key, value in self.state.items()}
 
-        self.state.update(reward_variable_dict)
+        self.state.update(custom_variable_dict)
 
         return None
 
@@ -258,28 +257,28 @@ class StateBuilder:
 
     
     def initialise_live_data(self) -> object:
-        # Flag for completed initialisation
-        self.initialised = False
+        self.logger.info(f'Initialising live data function')
 
-        # Init reward for use in live data tasks
-        reward_name = self.pipeline['pipeline']['model']['model_reward']
-        self.reward = reward_factory(reward_name, self.config, self.pipeline)
+        if self.config['task_selection'] == 'task2' or self.config['task_selection'] == 'task3':
+            # Flag for completed initialisation
+            self.initialised = False
 
-        # Route to the correct function based on the task selection
-        if self.config['task_selection'] == 'task2':
-            route = self.live_step
-        elif self.config['task_selection'] == 'task3':
-            self.terminated = False
+            # Route to the correct function based on the task selection
+            if self.config['task_selection'] == 'task2':
+                route = self.live_step
+            elif self.config['task_selection'] == 'task3':
+                self.terminated = False
 
-            app = Trading(self.config, self.pipeline)
-            self.trading = app
+                app = Trading(self.config, self.pipeline)
+                self.trading = app
 
-            route = self.trading_step
+                route = self.trading_step
+            
+            self.logger.info(f'Initialised live data function')
         else:
-            self.logger.error('Live data usage not supported')
+            self.logger.error('Live data usage not supported or used for this task')
             route = None
-        
-        self.logger.info(f'Initialised live data function')
+
         return route
 
 
@@ -290,7 +289,7 @@ class StateBuilder:
         if self.initialised:
             self.live_data_function()
         else:
-            self.initialise_state(self.reward)
+            self.initialise_state()
             self.initialised = True
 
         return None
@@ -320,26 +319,28 @@ class StateBuilder:
             unscaled_df = self.state_df[self.unscaled_columns].reset_index(drop=True)
 
             temp_dataframe = pd.concat([temp_dataframe, unscaled_df], axis=1)
-        
-        # For the custom variables, grab the previous step values from the last step
-        reward_variable_dict = {key: self.state[key][1:] for key, value in self.reward_variables.items()}
 
         payload = self.trading.payload
 
-        # Get latest values for the custom reward variables
-        reward_variable_dict = self.reward.reward_step(payload, self.state_df, reward_variable_dict, self.terminated)
+        # For the custom variables, grab the previous step values from the last step
+        custom_variable_dict = {key: self.state[key][1:] for key, value in self.custom_variables.items()}
+
+        # Get latest values for the custom variables
+        custom_variable_dict = self.custom_logic.step(payload, self.state_df, custom_variable_dict, self.terminated)
 
         # store the state dictionary
         self.state = temp_dataframe.to_dict(orient='list')
 
         self.state = {key: np.array(value) for key, value in self.state.items()}
 
-        self.state.update(reward_variable_dict)
+        self.state.update(custom_variable_dict)
 
         self.logger.info(f'state updated: {self.state}')
 
+        self.trading.confirmTrades()
+
         # Sent state to trading_algorithm
-        self.trading.tradingAlgorithm(self.state)
+        self.trading.tradingAlgorithm(self.state, self.state_df)
 
         return None
 

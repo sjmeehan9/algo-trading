@@ -6,11 +6,12 @@ from ..utils import write_audit_json
 class TrainML:
     AUDIT_FILENAME = 'training_sessions.json'
 
-    def __init__(self, config: dict, pipeline: dict, evaluate: bool = False):
+    def __init__(self, config: dict, pipeline: dict, input_paths: dict = {}, evaluate: bool = False):
         self.logger = logging.getLogger(__name__)
         
         self.config = config
         self.pipeline = pipeline
+        self.input_paths = input_paths
         self.evaluate = evaluate
 
         self.path_dict = self._path_setup()
@@ -18,6 +19,8 @@ class TrainML:
 
     def _path_setup(self) -> dict:
         path_dict = {}
+
+        path_dict.update(self.input_paths)
 
         data_path = self.config['data_path']
         saved_data_path = os.path.join(data_path, 'models/')
@@ -30,12 +33,6 @@ class TrainML:
         tensorboard_path = os.path.join(pipeline_data_path, 'tensorboard/')
         path_dict['tensorboard_path'] = tensorboard_path
 
-        backtest_data_path = os.path.join(data_path, 'backtest/')
-        path_dict['backtest_data_path'] = backtest_data_path
-
-        pipeline_backtest_path = os.path.join(backtest_data_path, f'{self.pipeline_name}/')
-        path_dict['pipeline_backtest_path'] = pipeline_backtest_path
-
         # Create log and data folders
         if not os.path.exists(saved_data_path):
             os.makedirs(saved_data_path)
@@ -45,12 +42,6 @@ class TrainML:
 
         if not os.path.exists(tensorboard_path):
             os.makedirs(tensorboard_path)
-
-        if not os.path.exists(backtest_data_path):
-            os.makedirs(backtest_data_path)
-
-        if not os.path.exists(pipeline_backtest_path):
-            os.makedirs(pipeline_backtest_path)
 
         self.input_filename = self.config['input_model']
         model_file_ext = self.pipeline['pipeline']['model']['file_extension']
@@ -85,7 +76,7 @@ class TrainML:
                 overwrite = input(f'{self.model_filename} already exists. Do you want to overwrite it? (y/n) ')
                 if overwrite == 'n':
                     raise FileExistsError(f'{self.model_filename} already exists')
-            
+
         return path_dict
 
 
@@ -110,7 +101,7 @@ class TrainML:
 
     def start(self) -> None:
         # Instanciate training object
-        self.training = self.training_factory(self.pipeline['pipeline']['model']['pipeline_type'])
+        self.training = self.training_factory(self.pipeline['pipeline']['pipeline_type'])
 
         # Start training
         self.training.start()

@@ -4,10 +4,11 @@ import logging
 import numpy as np
 from ..trading.tools import TradingTools
 
-class TradingEnv(Env):
+class StrategyEnv(Env):
     DEFAULT_SPACE_MIN = 0
     DEFAULT_SPACE_MAX = 100000
     ACTION_SPACE_SIZE = 3
+    DUMMY_REWARD = 0
 
     def __init__(self, state_builder: object):
         super().__init__()
@@ -63,8 +64,7 @@ class TradingEnv(Env):
         
         self.state_builder.state_step(action)
 
-        # Within the reward function, calculate the reward for the current step
-        reward = self.state_builder.custom_logic.calculate_reward(self.state_builder.state)
+        reward = self.DUMMY_REWARD
         
         info = {}
 

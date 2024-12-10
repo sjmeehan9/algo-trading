@@ -1,0 +1,6 @@
+# Mapping for all configured pipeline types
+pipeline_type:
+  ml:
+    - rl
+  strategies:
+    - strategy

@@ -16,7 +16,7 @@ def wrapper_path(pipeline: dict) -> tuple:
     return '', reward_wrapper_filename, reward_function
 
 
-def wrapper_function(func: callable) -> callable:
+def reward_wrapper_function(func: callable) -> callable:
     def wrapped_function(self, *args, **kwargs):
         if not hasattr(self, 'cached_reward'):
             reward_path, reward_wrapper_filename, reward_function = wrapper_path(self.pipeline)

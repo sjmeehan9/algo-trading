@@ -1,6 +1,7 @@
 import os
 from threading import Timer
 from .data_sourcing.save_historical import PastData
+from .models.backtest import BackTest
 from .models.train_ml import TrainML
 from .load_config import pipeline_loader
 from .trading.trading_data import TradingStream
@@ -44,7 +45,7 @@ def init_task(config: dict, task_options: list, pipeline: dict) -> None:
         app = TradingStream(config, pipeline, config['stream_data'])
         app.start()
     elif task == 'task4':
-        app = TrainML(config, pipeline, True)
+        app = BackTest(config, pipeline)
         app.start()
     else:
         raise ValueError(f'{task} is not a valid task')

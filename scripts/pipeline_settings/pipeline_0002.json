@@ -1,8 +1,8 @@
 {
   "pipeline": {
-    "filename": "pipeline_0001",
-    "description": "Basic RL model for AMD NASDAQ stock",
-    "pipeline_type": "rl",
+    "filename": "pipeline_0002",
+    "description": "RSI/MACD strategy for AMD NASDAQ stock",
+    "pipeline_type": "strategy",
     "client_id": {
       "historical": 0,
       "live": 1,
@@ -21,7 +21,7 @@
       "price_key": "close",
       "balance_multiplier": 0.9,
       "stop_take": {
-        "enabled": true,
+        "enabled": false,
         "takeover_mode": false,
         "stop_loss_limit": -0.15,
         "take_profit_rolling": 0.30,
@@ -57,24 +57,24 @@
       ],
       "barSizeSetting": 5,
       "whatToShow": "TRADES",
-      "runtime": 60,
+      "runtime": 120,
       "fakerColumnTypes": {
         "volume": "int",
         "wap": "float"
       }
     },
     "env_config": {
-      "env_name": "trading_env"
+      "env_name": "strategy_env"
     },
     "state_data_config": {
       "columns": {
         "date": [true, false],
-        "open": [false, true],
-        "high": [false, true],
-        "low": [false, true],
-        "close": [false, true],
-        "volume": [false, true],
-        "count": [false, true]
+        "open": [false, false],
+        "high": [false, false],
+        "low": [false, false],
+        "close": [false, false],
+        "volume": [false, false],
+        "count": [false, false]
       },
       "file_trim": 0.038,
       "past_events": 60,

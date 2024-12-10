@@ -1,7 +1,9 @@
 from datetime import datetime
 import json
 import os
+from pathlib import Path
 import pytz
+from .load_config import config_loader
 
 # Function to check for an audit json file, and create one if it doesn't exist
 def write_audit_json(audit_filepath: str, session_info: dict) -> None:
@@ -26,6 +28,17 @@ def write_audit_json(audit_filepath: str, session_info: dict) -> None:
         json.dump(data, f, indent=4)
 
     return None
+
+
+# Function to find and return the pipeline config file
+def pipeline_type_config(config_filename) -> dict:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = Path(current_dir).parents[0]
+
+    config_file_path = os.path.join(parent_dir, 'config/', config_filename)
+    config_file = config_loader(config_file_path)
+
+    return config_file
 
 
 # Custom function to parse datetime string and convert to a timezone-aware datetime object

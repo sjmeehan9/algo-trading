@@ -7,7 +7,7 @@ class Scaler:
 
         self.pipeline = pipeline
 
-        self.scaler = self.pipeline['pipeline']['model_data_config']['scaler']
+        self.scaler = self.pipeline['pipeline']['state_data_config']['scaler']
 
 
     def scaler_factory(self) -> object:

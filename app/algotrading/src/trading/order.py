@@ -1,5 +1,6 @@
 import logging
 from ibapi.order import Order
+import pandas as pd
 
 class OrderManager:
     def __init__(self, config: dict, pipeline: dict):
@@ -9,6 +10,7 @@ class OrderManager:
         self.pipeline = pipeline
 
         self.order_type = self.pipeline['pipeline']['trading_config']['order_type']
+        self.contract_price = self.pipeline['pipeline']['trading_config']['price_key']
         self.balance_multiplier = self.pipeline['pipeline']['trading_config']['balance_multiplier']
 
 
@@ -18,6 +20,12 @@ class OrderManager:
             return True
         else:
             return False
+
+
+    def priceAction(self, state_df: pd.DataFrame) -> float:
+        price = state_df[self.contract_price].iloc[-1]
+
+        return price
         
 
     def calcOrderSpec(self, balance, units, action, activePos, price) -> list:
@@ -56,17 +64,17 @@ class OrderManager:
         return order, active_pos
 
 
-    def positionUnlock(self, active_position, balance_figure, balance_list, update_position) -> tuple:
+    def positionUnlock(self, active_position, balance_figure, balance_list) -> tuple:
         
         balance_list.append(balance_figure)
         
         if '_FILL' in active_position and len(balance_list) == 2:
-            update_reward_vars = True
+            update_state_data = True
             balance_list = []
             
         else:
-            update_reward_vars = False
+            update_state_data = False
             
-        self.logger.info(f'{update_reward_vars}, {balance_list}')
+        self.logger.info(f'{update_state_data}, {balance_list}')
         
-        return update_reward_vars, balance_list
+        return update_state_data, balance_list

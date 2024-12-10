@@ -1,7 +1,9 @@
 import logging
 import pandas as pd
 from typing import Union
+from ..reward_functions.reward import reward_factory
 from .state_builder import StateBuilder
+from ..strategies.custom_logic import custom_logic_factory
 
 class StreamQueue:
     DATE_COLUMN = 'date'
@@ -12,8 +14,8 @@ class StreamQueue:
         self.config = config
         self.pipeline = pipeline
 
-        self.buffer_size = self.pipeline['pipeline']['model_data_config']['past_events']
-        self.pipeline_type = self.pipeline['pipeline']['model']['pipeline_type']
+        self.buffer_size = self.pipeline['pipeline']['state_data_config']['past_events']
+        self.pipeline_type = self.pipeline['pipeline']['pipeline_type']
 
         self.queue = pd.DataFrame()
         self.dates = set()
@@ -60,11 +62,17 @@ class StreamQueue:
 
     def route(self) -> object:
         if self.pipeline_type == 'rl':
-            self.state_builder = StateBuilder(self.config, self.pipeline)
-            route = self.state_builder.live_data
+            reward_name = self.pipeline['pipeline']['model']['model_reward']
+            custom_logic = reward_factory(reward_name, self.config, self.pipeline)
+        elif self.pipeline_type == 'strategy':
+            strategy_name = self.pipeline['pipeline']['strategy']['strategy_name']
+            custom_logic = custom_logic_factory(strategy_name, self.config, self.pipeline)
         else:
-            self.logger.error('Pipeline type not supported')
-            route = None
+            self.logger.error('Pipeline type not supported to receive live data')
+            raise NotImplementedError('Pipeline type not supported to receive live data')
+
+        self.state_builder = StateBuilder(self.config, self.pipeline, custom_logic)
+        route = self.state_builder.live_data
         
         self.logger.info(f'Route function defined')
         return route
