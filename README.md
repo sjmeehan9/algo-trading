@@ -3,7 +3,8 @@
 Save historical stock market data, train reinforcement learning models on 
 the same data in a realistic trading environment, backtest the model's 
 performance and execute paper or live account trades using a trained 
-model. This application leverages the Interactive Brokers TWS API to 
+model on live streaming data. Or create and integrate a bespoke trading strategy that uses past periods of stock market data to return a trading action.
+This application leverages the Interactive Brokers TWS API to 
 provide a set of straightforward and integrated tools, designed to train 
 and deploy reinforcement learning models in the most realistic 
 conditions, emulating the costs and constraints of live trading in the TWS 
@@ -13,7 +14,7 @@ platform.
 Inspired by the many clickbait tutorials available that demo algorithmic 
 trading projects, running and making *profits* in highly unrealistic 
 environments. algo-trading is aligned to people who have dipped their 
-toe into the world of using AI/ML agents for automated stock trading, and 
+toe into the world of using AI/ML agents or techincal strategies for automated stock trading, and 
 are ready to progress to trialling the feasibility of algorithmic trading 
 strategies using their Interactive Brokers paper and eventually cash 
 account.
@@ -26,6 +27,7 @@ account.
 - Training a reinforcement learning model using a realistic environment that takes into account prices you would likely receive, including transaction costs and market buy/sell spreads
 - Backtesting using the same environment and data structures as training
 - Easy usage of a trained model in simulated trading sessions with an Interactive Brokers paper trading account
+- Integrating trading strategy code into a data pipeline that enables backtesting, paper trading and live trading
 - Everything pre-configured to start trading with real money including strong order management guardrails such as stop loss/take profit limits, which are included in the model's training environment
 - Logical places to extend the code for additional financial products (eg. Options), machine learning packages and reward functions
 
@@ -52,7 +54,7 @@ Each task will have the following effect:
 **Task 3** - Run a trading session using mock data locally or real data using 
 your paper or cash account
 
-**Task 4** - Backtest a trained model using the saved data
+**Task 4** - Backtest a trained model or strategy using the saved data
 
 ## Installation
 
@@ -68,18 +70,13 @@ Provided in the `scripts/` sample folder are the two types of configuration file
 Adjust the `config.yml` and pipeline json file settings, make the task selection and run main.py
 
 - Ensure the TWS application is running on your local machine when running tasks 1 and 3
-- By default, live_streaming.py and trading.py are set to run for 10 minutes, adjust the BASE_SECONDS variable and reinstall to change
 
 Contact me if you would like an explanation of the project, and help to scale any of the functionality.
-
-### Project Overview
-
-![Project Overview](docs/20240901_overview.png)
 
 ## Appendix
 
 #### Classes
-![Class Diagram](docs/20240901_classes_algotrading.png)
+![Class Diagram](docs/20241210_classes_algotrading.png)
 
 #### Call Graph
-![Call Graph](docs/20240901_call_graph.png)
+![Call Graph](docs/20241210_call_graph.png)
