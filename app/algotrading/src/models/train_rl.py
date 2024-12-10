@@ -107,6 +107,7 @@ class TrainRL:
             # Loop through the environment
             while not self.state_builder.terminated:
                 action, _states = self.model.predict(state)
+                action = action.item()
 
                 state, reward, terminated, truncated, info = self.env.step(action)
 
@@ -121,7 +122,7 @@ class TrainRL:
                     last_row[key] = state[key][-1]
 
                 last_row[self.REWARD] = reward
-                last_row[self.ACTION] = action.item()
+                last_row[self.ACTION] = action
 
                 # Append the modified last row to eval_dataframe
                 self.eval_dataframe = pd.concat([self.eval_dataframe, last_row], ignore_index=True)

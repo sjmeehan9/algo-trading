@@ -57,7 +57,7 @@
       ],
       "barSizeSetting": 5,
       "whatToShow": "TRADES",
-      "runtime": 120,
+      "runtime": 60,
       "fakerColumnTypes": {
         "volume": "int",
         "wap": "float"
