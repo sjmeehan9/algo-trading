@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 import pandas as pd
+from typing import Dict
 import warnings
 from .strategy_wrapper import strategy_wrapper_function
 from ..trading.financials import Financials
@@ -9,8 +10,8 @@ from ..trading.payload import Payload
 class ProfitMetrics(Financials):
     CUSTOM_VARIABLES = {
         'current_position': [0, 2, np.int64],
-        'trade_change': [-100000, 100000, np.float64],
-        'running_profit': [-100000, 100000, np.float64]
+        'trade_change': [-1000000, 1000000, np.float64],
+        'running_profit': [-1000000, 1000000, np.float64]
     }
     PRICE_PAID = 0.0
     SET_PROFIT = 0.0
@@ -251,7 +252,7 @@ class ProfitMetrics(Financials):
 
 
     @strategy_wrapper_function
-    def predict(self, state: dict) -> tuple:
+    def predict(self, state: Dict[str, np.ndarray], _states: dict) -> tuple:
         action = 0
-        _states = state
+        _states = {}
         return action, _states

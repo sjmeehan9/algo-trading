@@ -48,6 +48,8 @@ class Strategy:
 
 
     def evaluate_strategy(self) -> None:
+        self._states = {}
+        
         while not self.state_builder.timed_out:
             state, info = self.env.reset()
             self.logger.info('Environment reset complete')
@@ -62,7 +64,7 @@ class Strategy:
 
             # Loop through the environment
             while not self.state_builder.terminated:
-                action, _states = self.custom_logic.predict(state)
+                action, self._states = self.custom_logic.predict(state, self._states)
                 action = action.item()
 
                 state, reward, terminated, truncated, info = self.env.step(action)

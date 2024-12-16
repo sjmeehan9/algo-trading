@@ -6,7 +6,7 @@ from ..trading.tools import TradingTools
 
 class TradingEnv(Env):
     DEFAULT_SPACE_MIN = 0
-    DEFAULT_SPACE_MAX = 100000
+    DEFAULT_SPACE_MAX = 1000000
     ACTION_SPACE_SIZE = 3
 
     def __init__(self, state_builder: object):

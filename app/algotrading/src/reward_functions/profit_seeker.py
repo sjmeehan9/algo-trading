@@ -10,8 +10,8 @@ from ..trading.payload import Payload
 class ProfitSeeker(Financials):
     CUSTOM_VARIABLES = {
         'current_position': [0, 2, np.int64],
-        'trade_change': [-100000, 100000, np.float64],
-        'running_profit': [-100000, 100000, np.float64]
+        'trade_change': [-1000000, 1000000, np.float64],
+        'running_profit': [-1000000, 1000000, np.float64]
     }
     PRICE_PAID = 0.0
     SET_PROFIT = 0.0
