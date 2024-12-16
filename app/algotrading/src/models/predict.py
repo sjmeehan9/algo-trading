@@ -17,16 +17,16 @@ class Predict:
 
         self.pipeline_type_dict = pipeline_type_config(self.CONFIG_FILENAME)
 
-        self.predictor = self.client(self.pipeline_type)
+        self.get_action = self.client(self.pipeline_type)
 
 
     def client(self, pipeline_type: str) -> object:
         if pipeline_type in self.pipeline_type_dict['pipeline_type']['ml']:
-            predictor = self.load_model()
-            return predictor
+            self.predictor = self.load_model()
+            return self.model_predict
         elif pipeline_type in self.pipeline_type_dict['pipeline_type']['strategies']:
-            predictor = self.load_strategy()
-            return predictor
+            self.predictor = self.load_strategy()
+            return self.strategy_predict
         else:
             self.logger.error('Pipeline type not recognised')
             raise NotImplementedError('Pipeline type not recognised')
@@ -36,6 +36,8 @@ class Predict:
         strategy_name = self.pipeline['pipeline']['strategy']['strategy_name']
         custom_logic = custom_logic_factory(strategy_name, self.config, self.pipeline)
         self.logger.info(f'Loaded strategy: {strategy_name}')
+
+        self._states = {}
 
         return custom_logic
 
@@ -60,8 +62,13 @@ class Predict:
             self.logger.error('model_type not recognised')
         
         return model
-    
 
-    def get_action(self, obs: dict) -> tuple:
+
+    def strategy_predict(self, obs: dict) -> tuple:
+        action, self._states = self.predictor.predict(obs, self._states)
+        return action, self._states
+
+
+    def model_predict(self, obs: dict) -> tuple:
         action, _states = self.predictor.predict(obs)
         return action, _states

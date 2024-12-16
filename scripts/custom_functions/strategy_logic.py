@@ -2,8 +2,9 @@ import numpy as np
 from typing import Dict, Tuple
 
 class TradingStrategy:
-    def __init__(self, data: Dict[str, np.ndarray]) -> None:
+    def __init__(self, data: Dict[str, np.ndarray], _states: dict) -> None:
         self.data: Dict[str, np.ndarray] = data
+        self._states: dict = _states
         self.close: np.ndarray = data['close']
         self.current_position: int = int(data['current_position'][-1])  # Get the last known position
 
@@ -22,6 +23,7 @@ class TradingStrategy:
 
         # Ensure we have at least two data points to compare price changes
         if len(self.close) < 2:
+            self._states = {'action': 0}
             return np.array([0], dtype=int)
 
         last_close = self.close[-1]
@@ -55,15 +57,16 @@ class TradingStrategy:
             # Undefined position scenario, just do nothing
             action = 0
 
-        return np.array([action], dtype=int)
+        self._states = {'action': action}
+        return np.array([action], dtype=int), self._states
 
 
-def predict(self, data: Dict[str, np.ndarray]) -> Tuple[np.ndarray, Dict]:
-    strategy = TradingStrategy(data)
+def predict(self, state: Dict[str, np.ndarray], _states: dict) -> Tuple[np.ndarray, Dict]:
+    strategy = TradingStrategy(state, _states)
 
-    action = strategy.predict()
-    _states = {}
+    action, _states = strategy.predict()
 
     self.logger.info(f'Action: {action}')
+    self.logger.info(f'States: {_states}')
 
     return action, _states
