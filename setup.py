@@ -33,7 +33,12 @@ setup(
         'tensorflow>=2.16.1'
     ],
     extras_require={
-        'dev': ['pytest>=7.0', 'twine>=4.0.2'],
+        'dev': [
+            'pytest>=7.0',
+            'pytest-cov>=4.1.0',
+            'pytest-mock>=3.12.0',
+            'twine>=4.0.2',
+        ],
     },
     python_requires='>=3.10'
 )
