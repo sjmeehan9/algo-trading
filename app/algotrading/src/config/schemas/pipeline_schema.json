@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pipeline Configuration",
+  "type": "object",
+  "required": ["pipeline"],
+  "properties": {
+    "pipeline": {
+      "type": "object",
+      "required": [
+        "filename",
+        "pipeline_type",
+        "client_id",
+        "timezone",
+        "contract_info",
+        "trading_config",
+        "historical_data_config",
+        "live_data_config",
+        "env_config",
+        "state_data_config",
+        "strategy",
+        "model"
+      ],
+      "properties": {
+        "filename": {"type": "string", "minLength": 1},
+        "description": {"type": "string"},
+        "pipeline_type": {"type": "string", "enum": ["rl", "strategy"]},
+        "client_id": {
+          "type": "object",
+          "required": ["historical", "live", "trading"],
+          "properties": {
+            "historical": {"type": "integer", "minimum": 0},
+            "live": {"type": "integer", "minimum": 0},
+            "trading": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": true
+        },
+        "timezone": {"type": "string", "minLength": 1},
+        "contract_info": {
+          "type": "object",
+          "required": ["symbol", "secType", "exchange", "currency", "primaryExchange"],
+          "properties": {
+            "symbol": {"type": "string", "minLength": 1},
+            "secType": {"type": "string", "minLength": 1},
+            "exchange": {"type": "string", "minLength": 1},
+            "currency": {"type": "string", "minLength": 1},
+            "primaryExchange": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": true
+        },
+        "trading_config": {
+          "type": "object",
+          "required": ["order_type", "price_key", "balance_multiplier", "stop_take"],
+          "properties": {
+            "order_type": {"type": "string", "minLength": 1},
+            "price_key": {"type": "string", "minLength": 1},
+            "balance_multiplier": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+            "stop_take": {
+              "type": "object",
+              "required": [
+                "enabled",
+                "takeover_mode",
+                "stop_loss_limit",
+                "take_profit_rolling",
+                "take_profit_floor",
+                "profit_key",
+                "position_key"
+              ],
+              "properties": {
+                "enabled": {"type": "boolean"},
+                "takeover_mode": {"type": "boolean"},
+                "stop_loss_limit": {"type": "number"},
+                "take_profit_rolling": {"type": "number"},
+                "take_profit_floor": {"type": "number"},
+                "profit_key": {"type": "string", "minLength": 1},
+                "position_key": {"type": "string", "minLength": 1}
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        },
+        "historical_data_config": {
+          "type": "object",
+          "required": ["columns", "barSizeSetting", "whatToShow"],
+          "properties": {
+            "columns": {
+              "type": "array",
+              "items": {"type": "string"},
+              "minItems": 1
+            },
+            "barSizeSetting": {"type": "string", "minLength": 1},
+            "whatToShow": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": true
+        },
+        "live_data_config": {
+          "type": "object",
+          "required": ["columns", "barSizeSetting", "whatToShow", "runtime"],
+          "properties": {
+            "columns": {
+              "type": "array",
+              "items": {"type": "string"},
+              "minItems": 1
+            },
+            "barSizeSetting": {
+              "anyOf": [
+                {"type": "integer", "minimum": 1},
+                {"type": "string", "minLength": 1}
+              ]
+            },
+            "whatToShow": {"type": "string", "minLength": 1},
+            "runtime": {"type": "integer", "minimum": 1},
+            "fakerColumnTypes": {
+              "type": "object",
+              "additionalProperties": {"type": "string"}
+            }
+          },
+          "additionalProperties": true
+        },
+        "env_config": {
+          "type": "object",
+          "required": ["env_name"],
+          "properties": {
+            "env_name": {"type": "string", "enum": ["trading_env", "strategy_env"]}
+          },
+          "additionalProperties": true
+        },
+        "state_data_config": {
+          "type": "object",
+          "required": ["columns", "file_trim", "past_events", "scaler"],
+          "properties": {
+            "columns": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {"type": "boolean"},
+                "minItems": 2,
+                "maxItems": 2
+              }
+            },
+            "file_trim": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+            "past_events": {"type": "integer", "minimum": 1},
+            "scaler": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": true
+        },
+        "strategy": {
+          "type": "object",
+          "required": [
+            "strategy_name",
+            "strategy_wrapper_filename",
+            "strategy_wrapper_path"
+          ],
+          "properties": {
+            "strategy_name": {"type": "string", "minLength": 1},
+            "strategy_wrapper_filename": {"type": "string", "minLength": 1},
+            "strategy_wrapper_path": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": true
+        },
+        "model": {
+          "type": "object",
+          "required": [
+            "model_type",
+            "model_policy",
+            "model_reward",
+            "reward_wrapper_filename",
+            "reward_wrapper_path",
+            "file_extension",
+            "replay_buffer_extension",
+            "model_config"
+          ],
+          "properties": {
+            "model_type": {"type": "string", "enum": ["ppo", "dqn"]},
+            "model_policy": {"type": "string", "minLength": 1},
+            "model_reward": {"type": "string", "minLength": 1},
+            "reward_wrapper_filename": {"type": "string", "minLength": 1},
+            "reward_wrapper_path": {"type": "string", "minLength": 1},
+            "file_extension": {"type": "string", "minLength": 1},
+            "replay_buffer_extension": {"type": "string", "minLength": 1},
+            "model_config": {
+              "type": "object",
+              "required": [
+                "learning_rate",
+                "n_steps",
+                "batch_size",
+                "n_epochs",
+                "gamma",
+                "gae_lambda",
+                "clip_range",
+                "clip_range_vf",
+                "ent_coef",
+                "vf_coef",
+                "max_grad_norm",
+                "target_kl",
+                "seed",
+                "verbose",
+                "normalize_advantage",
+                "policy_kwargs"
+              ],
+              "properties": {
+                "learning_rate": {"type": "number", "exclusiveMinimum": 0.0},
+                "n_steps": {"type": "integer", "minimum": 1},
+                "batch_size": {"type": "integer", "minimum": 1},
+                "n_epochs": {"type": "integer", "minimum": 1},
+                "gamma": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+                "gae_lambda": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+                "clip_range": {"type": "number", "minimum": 0.0},
+                "clip_range_vf": {"type": ["number", "null"], "minimum": 0.0},
+                "ent_coef": {"type": "number", "minimum": 0.0},
+                "vf_coef": {"type": "number", "minimum": 0.0},
+                "max_grad_norm": {"type": "number", "minimum": 0.0},
+                "target_kl": {"type": ["number", "null"], "minimum": 0.0},
+                "seed": {"type": "integer", "minimum": 0},
+                "verbose": {"type": "integer", "minimum": 0},
+                "normalize_advantage": {"type": "boolean"},
+                "policy_kwargs": {
+                  "type": "object",
+                  "required": ["net_arch"],
+                  "properties": {
+                    "net_arch": {
+                      "type": "object",
+                      "required": ["pi", "vf"],
+                      "properties": {
+                        "pi": {
+                          "type": "array",
+                          "items": {"type": "integer", "minimum": 1},
+                          "minItems": 1
+                        },
+                        "vf": {
+                          "type": "array",
+                          "items": {"type": "integer", "minimum": 1},
+                          "minItems": 1
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

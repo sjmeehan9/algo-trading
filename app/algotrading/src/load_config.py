@@ -1,11 +1,23 @@
-import yaml
 import json
+
+import yaml
+from algotrading.src.config.validation import (
+    ConfigValidationError,
+    validate_pipeline_config,
+    validate_runtime_config,
+)
+
 
 # Load a YAML config file
 def config_loader(filepath) -> dict:
     try:
-        with open(filepath, 'r') as f:
+        with open(filepath, "r") as f:
             config = yaml.safe_load(f)
+            is_valid, errors = validate_runtime_config(config)
+            if not is_valid:
+                raise ConfigValidationError(
+                    f"Config validation failed for {filepath}", tuple(errors)
+                )
             return config
     except FileNotFoundError:
         raise Exception("Config file not found")
@@ -16,8 +28,13 @@ def config_loader(filepath) -> dict:
 # Load a JSON pipeline file
 def pipeline_loader(filepath) -> dict:
     try:
-        with open(filepath, 'r') as f:
+        with open(filepath, "r") as f:
             pipeline = json.load(f)
+            is_valid, errors = validate_pipeline_config(pipeline)
+            if not is_valid:
+                raise ConfigValidationError(
+                    f"Pipeline validation failed for {filepath}", tuple(errors)
+                )
             return pipeline
     except FileNotFoundError:
         raise Exception("Pipeline file not found")

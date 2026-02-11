@@ -24,6 +24,7 @@ setup(
     ],
     install_requires=[
         'gymnasium>=0.29.1',
+        'jsonschema>=4.21.1',
         'numpy>=1.26.3',
         'pandas>=2.1.4',
         'pytz>=2023.3.post1',

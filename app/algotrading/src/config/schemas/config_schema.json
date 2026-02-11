@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Runtime Configuration",
+  "type": "object",
+  "required": [
+    "ip_address",
+    "port",
+    "account_number",
+    "pipeline",
+    "log_path",
+    "data_path",
+    "task_selection"
+  ],
+  "properties": {
+    "ip_address": {
+      "type": "string",
+      "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$"
+    },
+    "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+    "account_number": {"type": "string", "minLength": 1},
+    "pipeline": {"type": "string", "pattern": "^pipeline_[0-9]{4}$"},
+    "log_path": {"type": "string", "minLength": 1},
+    "data_path": {"type": "string", "minLength": 1},
+    "task_selection": {
+      "type": "string",
+      "enum": ["task1", "task2", "task3", "task4"]
+    },
+    "data_mode": {"type": "string", "enum": ["historical", "live"]},
+    "date_list": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+      "minItems": 1
+    },
+    "input_model": {"type": "string"},
+    "save_to_file": {"type": "string"},
+    "training_date_list": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+      "minItems": 1
+    },
+    "stream_data": {"type": "string", "enum": ["real", "fake"]},
+    "trading_model": {"type": "string"},
+    "backtest_model": {"type": "string"},
+    "backtest_date_list": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+      "minItems": 1
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"task_selection": {"const": "task1"}}},
+      "then": {"required": ["date_list"]}
+    },
+    {
+      "if": {"properties": {"task_selection": {"const": "task2"}}},
+      "then": {"required": ["training_date_list", "save_to_file", "data_mode"]}
+    },
+    {
+      "if": {"properties": {"task_selection": {"const": "task3"}}},
+      "then": {"required": ["stream_data", "trading_model"]}
+    },
+    {
+      "if": {"properties": {"task_selection": {"const": "task4"}}},
+      "then": {"required": ["backtest_model", "backtest_date_list"]}
+    }
+  ],
+  "additionalProperties": true
+}
