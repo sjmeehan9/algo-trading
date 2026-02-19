@@ -1,25 +1,31 @@
 import datetime
 import logging
-from ibapi.client import EClient
-from ibapi.wrapper import EWrapper
-from ibapi.contract import Contract
 import os
 from pathlib import Path
+
+from ibapi.client import EClient
+from ibapi.contract import Contract
+from ibapi.wrapper import EWrapper
+
+from ..exceptions import BrokerConnectionError, DataError
 from ..load_config import config_loader
 from .stream_queue import StreamQueue
 
+logger = logging.getLogger(__name__)
+
+
 class LiveData(EWrapper, EClient):
-    CONFIG_FILENAME = 'live_streaming.yml'
-    HISTORICAL_CONFIG = 'historical_data.yml'
-    CURRENT_BAR = ''
+    CONFIG_FILENAME = "live_streaming.yml"
+    HISTORICAL_CONFIG = "historical_data.yml"
+    CURRENT_BAR = ""
     INIT_REQUEST_ID = 1000
-    DATE_COLUMN = 'date'
+    DATE_COLUMN = "date"
 
     def __init__(self, config: dict, pipeline: dict):
         EClient.__init__(self, self)
 
-        self.logger = logging.getLogger(__name__)
-        
+        self.logger = logger
+
         self.config = config
         self.pipeline = pipeline
 
@@ -28,59 +34,89 @@ class LiveData(EWrapper, EClient):
         current_dir = os.path.dirname(os.path.abspath(__file__))
         parent_dir = Path(current_dir).parents[1]
 
-        config_file_path = os.path.join(parent_dir, 'config/', self.CONFIG_FILENAME)
-        self.script_config = config_loader(config_file_path)
+        config_file_path = os.path.join(parent_dir, "config/", self.CONFIG_FILENAME)
+        self.script_config = config_loader(config_file_path, validate=False)
 
-        historical_config_path = os.path.join(parent_dir, 'config/', self.HISTORICAL_CONFIG)
-        self.historical_config = config_loader(historical_config_path)
+        historical_config_path = os.path.join(
+            parent_dir, "config/", self.HISTORICAL_CONFIG
+        )
+        self.historical_config = config_loader(historical_config_path, validate=False)
 
-        contract_info = self.pipeline['pipeline']['contract_info']
+        contract_info = self.pipeline["pipeline"]["contract_info"]
         self.contract = Contract()
-        self.contract.symbol = contract_info['symbol']
-        self.contract.secType = contract_info['secType']
-        self.contract.exchange = contract_info['exchange']
-        self.contract.currency = contract_info['currency']
-        self.contract.primaryExchange = contract_info['primaryExchange']
+        self.contract.symbol = contract_info["symbol"]
+        self.contract.secType = contract_info["secType"]
+        self.contract.exchange = contract_info["exchange"]
+        self.contract.currency = contract_info["currency"]
+        self.contract.primaryExchange = contract_info["primaryExchange"]
 
-        self.live_info = self.pipeline['pipeline']['live_data_config']
-        self.historical_info = self.pipeline['pipeline']['historical_data_config']
+        self.live_info = self.pipeline["pipeline"]["live_data_config"]
+        self.historical_info = self.pipeline["pipeline"]["historical_data_config"]
 
-        self.bar_columns = self.script_config['bar_columns']
-        self.historical_columns = self.historical_config['bar_columns']
+        self.bar_columns = self.script_config["bar_columns"]
+        self.historical_columns = self.historical_config["bar_columns"]
 
-        self.step_size = self.historical_config['step_size'][self.historical_info['barSizeSetting']]
+        self.step_size = self.historical_config["step_size"][
+            self.historical_info["barSizeSetting"]
+        ]
         self.data_list = []
 
         self.timer = self.setTimer()
 
-        
-    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson='') -> None:
-        self.logger.info(f'Error: {reqId}, {errorCode}, {errorString}')
-
+    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson="") -> None:
+        self.logger.error(
+            "Broker API error | req_id=%s error_code=%s message=%s",
+            reqId,
+            errorCode,
+            errorString,
+        )
 
     def connect(self, ip_address, port, client_id):
-        super().connect(ip_address, port, client_id)
-
+        try:
+            super().connect(ip_address, port, client_id)
+        except Exception as exc:
+            raise BrokerConnectionError(
+                "Failed to connect for live streaming",
+                broker_name="interactive_brokers",
+                host=ip_address,
+                port=port,
+                context={"client_id": client_id, "error": str(exc)},
+            ) from exc
 
     def nextValidId(self, orderId: int) -> None:
         super().nextValidId(orderId)
         self.nextValidOrderId = orderId
 
-        self.logger.info(f'Starting LiveData connection: {self.nextValidOrderId}')
+        self.logger.info(f"Starting LiveData connection: {self.nextValidOrderId}")
 
         self.start()
 
-    
     def setTimer(self) -> int:
-        runtime = self.pipeline['pipeline']['live_data_config']['runtime']
+        runtime = self.pipeline["pipeline"]["live_data_config"]["runtime"]
         return runtime
-    
 
     def sendRequests(self) -> None:
-
-        self.reqHistoricalData(self.req_it, self.contract, '', self.step_size['durationString'], 
-                self.historical_info['barSizeSetting'], self.historical_info['whatToShow'], 1, 2, False, [])
-        
+        try:
+            self.reqHistoricalData(
+                self.req_it,
+                self.contract,
+                "",
+                self.step_size["durationString"],
+                self.historical_info["barSizeSetting"],
+                self.historical_info["whatToShow"],
+                1,
+                2,
+                False,
+                [],
+            )
+        except Exception as exc:
+            raise BrokerConnectionError(
+                "Failed requesting live historical warmup data",
+                broker_name="interactive_brokers",
+                host=self.config.get("ip_address"),
+                port=self.config.get("port"),
+                context={"request_id": self.req_it, "error": str(exc)},
+            ) from exc
 
     # Receive historical data
     def historicalData(self, reqId, bar) -> None:
@@ -89,17 +125,18 @@ class LiveData(EWrapper, EClient):
             self.CURRENT_BAR = bar.date
 
         elif self.CURRENT_BAR != bar.date:
-            new_row = {self.historical_columns['bar_date']: int(bar.date), 
-                       self.historical_columns['bar_open']: bar.open, 
-                       self.historical_columns['bar_high']: bar.high, 
-                       self.historical_columns['bar_low']: bar.low, 
-                       self.historical_columns['bar_close']: bar.close, 
-                       self.historical_columns['bar_volume']: bar.volume, 
-                       self.historical_columns['bar_wap']: bar.wap, 
-                       self.historical_columns['bar_barCount']: bar.barCount}
+            new_row = {
+                self.historical_columns["bar_date"]: int(bar.date),
+                self.historical_columns["bar_open"]: bar.open,
+                self.historical_columns["bar_high"]: bar.high,
+                self.historical_columns["bar_low"]: bar.low,
+                self.historical_columns["bar_close"]: bar.close,
+                self.historical_columns["bar_volume"]: bar.volume,
+                self.historical_columns["bar_wap"]: bar.wap,
+                self.historical_columns["bar_barCount"]: bar.barCount,
+            }
             self.data_list.append(new_row)
             self.CURRENT_BAR = bar.date
-
 
     def historicalDataEnd(self, reqId: int, start: str, end: str) -> None:
 
@@ -107,24 +144,38 @@ class LiveData(EWrapper, EClient):
 
         self.req_it += 1
 
-        self.CURRENT_BAR = ''
+        self.CURRENT_BAR = ""
 
         self.data_validation = self.dataValidation()
 
         if self.data_validation:
-            self.logger.info('Data validation passed')
+            self.logger.info("Data validation passed")
         else:
-            self.logger.error('Data validation failed, dropping data list')
+            self.logger.warning(
+                "Data validation failed, dropping historical warmup data"
+            )
             self.data_list = []
 
-        self.reqRealTimeBars(self.req_it, self.contract, self.live_info['barSizeSetting'], 
-                    self.live_info['whatToShow'], True, [])
-        
-    
+        self.reqRealTimeBars(
+            self.req_it,
+            self.contract,
+            self.live_info["barSizeSetting"],
+            self.live_info["whatToShow"],
+            True,
+            [],
+        )
+
     def dataValidation(self) -> bool:
         dates = [int(d[self.DATE_COLUMN]) for d in self.data_list]
 
-        self.time_increment = int(self.live_info['barSizeSetting'])
+        if not dates:
+            raise DataError(
+                "No historical bars received for live data warmup",
+                data_source="live_historical_warmup",
+                row_count=0,
+            )
+
+        self.time_increment = int(self.live_info["barSizeSetting"])
 
         # Calculate the expected number of entries. Only going to work for seconds
         start_date = dates[0]
@@ -143,36 +194,44 @@ class LiveData(EWrapper, EClient):
             current_date += self.time_increment
 
         return True
-    
 
     def connectDates(self, time: int) -> bool:
         connect_time = time - self.time_increment
 
         if connect_time == self.end_date:
-            self.logger.info('Final historical bar increments to real time data, transferring to real time stream')
+            self.logger.info(
+                "Final historical bar increments to real time data, transferring to real time stream"
+            )
             return True
         elif connect_time > self.end_date:
-            self.logger.info('Gap between historical data end time exists, dropping data')
+            self.logger.info(
+                "Gap between historical data end time exists, dropping data"
+            )
             self.data_list = []
             return True
         else:
-            self.logger.info('Real time data overlaps with historical end time, waiting for new data')
+            self.logger.info(
+                "Real time data overlaps with historical end time, waiting for new data"
+            )
             return False
 
-    
     # Receive live data
-    def realtimeBar(self, reqId, time, open_, high, low, close, volume, wap, count) -> None:
+    def realtimeBar(
+        self, reqId, time, open_, high, low, close, volume, wap, count
+    ) -> None:
 
-        self.logger.info('Start of trade data flow: %s', datetime.datetime.now())
+        self.logger.info("Start of trade data flow: %s", datetime.datetime.now())
 
-        new_row = {self.bar_columns['bar_date']: time, 
-                    self.bar_columns['bar_open']: open_, 
-                    self.bar_columns['bar_high']: high, 
-                    self.bar_columns['bar_low']: low, 
-                    self.bar_columns['bar_close']: close, 
-                    self.bar_columns['bar_volume']: volume, 
-                    self.bar_columns['bar_wap']: wap, 
-                    self.bar_columns['bar_barCount']: count}
+        new_row = {
+            self.bar_columns["bar_date"]: time,
+            self.bar_columns["bar_open"]: open_,
+            self.bar_columns["bar_high"]: high,
+            self.bar_columns["bar_low"]: low,
+            self.bar_columns["bar_close"]: close,
+            self.bar_columns["bar_volume"]: volume,
+            self.bar_columns["bar_wap"]: wap,
+            self.bar_columns["bar_barCount"]: count,
+        }
 
         if not self.CURRENT_BAR:
             process = self.connectDates(time)
@@ -186,18 +245,16 @@ class LiveData(EWrapper, EClient):
 
             self.CURRENT_BAR = time
 
-
     def start(self) -> None:
         self.req_it = self.INIT_REQUEST_ID
 
         # Request live realTimeBars data
         self.sendRequests()
 
-            
     def stop(self) -> None:
-        self.logger.info('LiveData connection closed')
+        self.logger.info("LiveData connection closed")
 
         self.cancelRealTimeBars(self.req_it)
-        
+
         self.done = True
         self.disconnect()

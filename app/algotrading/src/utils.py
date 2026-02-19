@@ -36,7 +36,7 @@ def pipeline_type_config(config_filename) -> dict:
     parent_dir = Path(current_dir).parents[0]
 
     config_file_path = os.path.join(parent_dir, 'config/', config_filename)
-    config_file = config_loader(config_file_path)
+    config_file = config_loader(config_file_path, validate=False)
 
     return config_file
 
