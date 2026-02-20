@@ -300,6 +300,8 @@ def test_parse_ib_timestamp_accepts_multiple_formats() -> None:
 
     from_compact = parse_ib_timestamp("20260220 14:50:00")
     from_epoch = parse_ib_timestamp("1761000600")
+    from_tz_named = parse_ib_timestamp("20260220 13:46:00 US/Eastern")
 
     assert from_compact.tzinfo is not None
     assert from_epoch.tzinfo is not None
+    assert from_tz_named.tzinfo is not None

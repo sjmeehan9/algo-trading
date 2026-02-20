@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Mapping, TypeAlias
+from zoneinfo import ZoneInfo
 
 
 class InstrumentType(str, Enum):
@@ -418,7 +419,9 @@ def contract_spec_from_ib_contract(contract: ContractLike) -> ContractSpec:
         _read_field(contract, "lastTradeDateOrContractMonth", default=None)
     )
     strike_raw = _read_field(contract, "strike", default=None)
-    strike = float(strike_raw) if strike_raw is not None else None
+    strike = float(strike_raw) if strike_raw not in (None, "") else None
+    if sec_type != "OPT" and strike == 0.0:
+        strike = None
     right = _optional_str(_read_field(contract, "right", default=None))
     multiplier_raw = _read_field(contract, "multiplier", default=None)
     multiplier = float(multiplier_raw) if multiplier_raw not in (None, "") else 1.0
@@ -547,6 +550,20 @@ def parse_ib_timestamp(value: object) -> datetime:
     raw = str(value).strip()
     if raw.isdigit():
         return datetime.fromtimestamp(int(raw), tz=UTC)
+
+    if " " in raw:
+        datetime_part, tz_name = raw.rsplit(" ", maxsplit=1)
+        if "/" in tz_name:
+            for candidate in (
+                "%Y%m%d %H:%M:%S",
+                "%Y%m%d  %H:%M:%S",
+                "%Y-%m-%d %H:%M:%S",
+            ):
+                try:
+                    parsed = datetime.strptime(datetime_part, candidate)
+                    return parsed.replace(tzinfo=ZoneInfo(tz_name))
+                except ValueError:
+                    continue
 
     for candidate in ("%Y%m%d %H:%M:%S", "%Y%m%d  %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
         try:
