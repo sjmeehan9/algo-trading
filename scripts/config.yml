@@ -5,13 +5,12 @@ account_number: DU1234567
 pipeline: pipeline_0002
 log_path: logs/
 data_path: data/
-task_selection: task4
+task_selection: task1
 data_mode: historical
 
 # Settings for task 1
 date_list:
-  - 2024-10-21
-  - 2024-10-22
+  - 2026-02-12
 
 # Settings for task 2
 input_model: ppo_x

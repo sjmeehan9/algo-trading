@@ -1,0 +1,118 @@
+{
+  "pipeline": {
+    "filename": "test_pipeline_rl",
+    "description": "Minimal RL pipeline for fixture testing",
+    "pipeline_type": "rl",
+    "client_id": {
+      "historical": 10,
+      "live": 11,
+      "trading": 12
+    },
+    "timezone": "US/Eastern",
+    "contract_info": {
+      "symbol": "AMD",
+      "secType": "STK",
+      "exchange": "SMART",
+      "currency": "USD",
+      "primaryExchange": "NASDAQ"
+    },
+    "trading_config": {
+      "order_type": "MKT",
+      "price_key": "close",
+      "balance_multiplier": 0.9,
+      "stop_take": {
+        "enabled": true,
+        "takeover_mode": false,
+        "stop_loss_limit": -0.1,
+        "take_profit_rolling": 0.2,
+        "take_profit_floor": 0.1,
+        "profit_key": "trade_change",
+        "position_key": "current_position"
+      }
+    },
+    "historical_data_config": {
+      "columns": [
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "wap",
+        "count"
+      ],
+      "barSizeSetting": "5 secs",
+      "whatToShow": "TRADES"
+    },
+    "live_data_config": {
+      "columns": [
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "wap",
+        "count"
+      ],
+      "barSizeSetting": 5,
+      "whatToShow": "TRADES",
+      "runtime": 30,
+      "fakerColumnTypes": {
+        "volume": "int",
+        "wap": "float"
+      }
+    },
+    "env_config": {
+      "env_name": "trading_env"
+    },
+    "state_data_config": {
+      "columns": {
+        "date": [true, false],
+        "close": [false, true],
+        "volume": [false, true],
+        "wap": [false, true]
+      },
+      "file_trim": 0.0,
+      "past_events": 30,
+      "scaler": "MinMaxScaler"
+    },
+    "strategy": {
+      "strategy_name": "profit_metrics",
+      "strategy_wrapper_filename": "strategy_logic",
+      "strategy_wrapper_path": "/custom_functions/"
+    },
+    "model": {
+      "model_type": "ppo",
+      "model_policy": "MultiInputPolicy",
+      "model_reward": "profit_seeker",
+      "reward_wrapper_filename": "reward",
+      "reward_wrapper_path": "/custom_functions/",
+      "file_extension": ".zip",
+      "replay_buffer_extension": "_replay_buffer.pkl",
+      "model_config": {
+        "learning_rate": 0.0003,
+        "n_steps": 128,
+        "batch_size": 32,
+        "n_epochs": 5,
+        "gamma": 0.99,
+        "gae_lambda": 0.9,
+        "clip_range": 0.2,
+        "clip_range_vf": null,
+        "ent_coef": 0.0,
+        "vf_coef": 0.5,
+        "max_grad_norm": 0.5,
+        "target_kl": null,
+        "seed": 7,
+        "verbose": 0,
+        "normalize_advantage": true,
+        "policy_kwargs": {
+          "net_arch": {
+            "pi": [64, 64],
+            "vf": [64, 64]
+          }
+        }
+      }
+    }
+  }
+}

@@ -3,3 +3,4 @@ include requirements.txt
 include config/*.yml
 graft config
 global-include *.yml
+recursive-include app/algotrading/src/config/schemas *.json

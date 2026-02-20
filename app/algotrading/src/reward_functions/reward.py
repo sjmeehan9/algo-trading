@@ -1,11 +1,17 @@
+"""Reward factory for selecting reward calculators."""
+
 import logging
-from .profit_seeker import ProfitSeeker
+
+from algotrading.src.reward_functions.profit_seeker import ProfitSeeker
 
 logger = logging.getLogger(__name__)
 
+
 def reward_factory(reward_name: str, config: dict, pipeline: dict) -> object:
-    if reward_name == 'profit_seeker':
+    """Return the configured reward calculator instance."""
+
+    if reward_name == "profit_seeker":
         return ProfitSeeker(config, pipeline)
-    else:
-        logger.error('reward_name not recognised')
-        return None
+
+    logger.error("reward_name not recognised")
+    return None

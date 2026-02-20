@@ -24,6 +24,7 @@ setup(
     ],
     install_requires=[
         'gymnasium>=0.29.1',
+        'jsonschema>=4.21.1',
         'numpy>=1.26.3',
         'pandas>=2.1.4',
         'pytz>=2023.3.post1',
@@ -33,7 +34,12 @@ setup(
         'tensorflow>=2.16.1'
     ],
     extras_require={
-        'dev': ['pytest>=7.0', 'twine>=4.0.2'],
+        'dev': [
+            'pytest>=7.0',
+            'pytest-cov>=4.1.0',
+            'pytest-mock>=3.12.0',
+            'twine>=4.0.2',
+        ],
     },
     python_requires='>=3.10'
 )

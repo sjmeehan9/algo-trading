@@ -1,28 +1,86 @@
+import json
 import logging
-import os
 import time
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
-# Create and configure logger
-def setup_logger(path, print_logs=False) -> None:
-    '''Function setup as many loggers as you want'''
-    if not os.path.exists(path):
-        os.makedirs(path)
 
-    time.strftime('pyibapi.%Y%m%d_%H%M%S.log')
+class JsonLogFormatter(logging.Formatter):
+    """JSON formatter for structured logging output."""
 
-    recfmt = '(%(threadName)s) %(asctime)s.%(msecs)03d %(levelname)s %(filename)s:%(lineno)d %(message)s'
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "module": record.name,
+            "message": record.getMessage(),
+            "thread": record.threadName,
+            "filename": record.filename,
+            "line": record.lineno,
+        }
+        return json.dumps(payload)
 
-    timefmt = '%y%m%d_%H:%M:%S'
 
-    logging.basicConfig(filename=time.strftime(f'{path}/pyibapi.%y%m%d_%H%M%S.log'),
-                        filemode='w',
-                        level=logging.INFO,
-                        format=recfmt, datefmt=timefmt)
-    logger = logging.getLogger(__name__)
+def setup_logger(
+    path: str,
+    print_logs: bool = False,
+    log_level: int | str = logging.INFO,
+    use_json: bool = False,
+    max_bytes: int = 5 * 1024 * 1024,
+    backup_count: int = 5,
+) -> logging.Logger:
+    """Configure and return the application logger.
+
+    Args:
+        path: Directory path where log files should be stored.
+        print_logs: If True, add a console stream handler.
+        log_level: Logging level for handlers and root logger.
+        use_json: If True, output logs as JSON-formatted records.
+        max_bytes: Maximum log file size before rotation.
+        backup_count: Number of rotated files to retain.
+
+    Returns:
+        Configured application logger instance.
+    """
+    log_dir = Path(path)
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    level = (
+        logging.getLevelName(log_level.upper())
+        if isinstance(log_level, str)
+        else log_level
+    )
+    if not isinstance(level, int):
+        raise ValueError(f"Invalid log level: {log_level}")
+
+    recfmt = "(%(threadName)s) %(asctime)s.%(msecs)03d %(levelname)s %(name)s %(filename)s:%(lineno)d %(message)s"
+    timefmt = "%y%m%d_%H:%M:%S"
+    formatter: logging.Formatter = (
+        JsonLogFormatter(datefmt=timefmt)
+        if use_json
+        else logging.Formatter(fmt=recfmt, datefmt=timefmt)
+    )
+
+    log_file = log_dir / time.strftime("pyibapi.%y%m%d_%H%M%S.log")
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    root_logger.handlers.clear()
+
+    file_handler = RotatingFileHandler(
+        filename=log_file,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(level)
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
 
     if print_logs:
-        console = logging.StreamHandler()
-        console.setLevel(logging.INFO)
-        logger.addHandler(console)
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(level)
+        console_handler.setFormatter(formatter)
+        root_logger.addHandler(console_handler)
 
-    return
+    return logging.getLogger(__name__)
