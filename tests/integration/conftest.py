@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,62 @@ from algotrading.src.models.train_ml import TrainML
 from algotrading.src.models.train_rl import TrainRL
 
 from tests.fixtures.data_validation import load_sample_data
+
+# ---------------------------------------------------------------------------
+# IB Gateway / TWS interactive confirmation fixtures
+# ---------------------------------------------------------------------------
+
+_IB_CONFIRMATION_PROMPT = (
+    "\n"
+    "=" * 60 + "\n"
+    "  IB INTEGRATION TEST — PRE-FLIGHT CHECK\n"
+    "=" * 60 + "\n"
+    "  Please confirm the following before continuing:\n"
+    "\n"
+    "  1. TWS or IB Gateway is running on 127.0.0.1:7497\n"
+    "  2. API connections are enabled (Edit > Global Config > API)\n"
+    "  3. You have market data subscriptions for the test symbols\n"
+    "  4. The account is in paper-trading mode\n"
+    "\n"
+    "  Type 'yes' to proceed or 'no' to skip: "
+)
+
+
+@pytest.fixture(scope="session")
+def confirm_ib_gateway() -> dict[str, Any]:
+    """Prompt the developer once per session to confirm TWS is available.
+
+    Returns:
+        Connection parameter dict with ``host``, ``port``, and ``client_id``.
+
+    Raises:
+        pytest.skip: If the developer declines or stdin is unavailable.
+    """
+
+    try:
+        answer = input(_IB_CONFIRMATION_PROMPT).strip().lower()
+    except EOFError:
+        pytest.skip("Non-interactive environment — cannot confirm TWS availability.")
+
+    if answer != "yes":
+        pytest.skip("Developer declined IB confirmation prompt.")
+
+    return {"host": "127.0.0.1", "port": 7497, "client_id": 100}
+
+
+def run_ib_client_in_thread(app: Any) -> threading.Thread:
+    """Start an EClient event-loop in a daemon thread.
+
+    Args:
+        app: An EClient/EWrapper instance that has already called ``connect``.
+
+    Returns:
+        The running daemon thread (stops when ``app.disconnect()`` is called).
+    """
+
+    thread = threading.Thread(target=app.run, daemon=True)
+    thread.start()
+    return thread
 
 
 @pytest.fixture(scope="session")

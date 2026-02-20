@@ -12,6 +12,33 @@ import pytest
 from tests.fixtures.mock_data import generate_ohlcv_data
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register custom CLI options for the test suite."""
+
+    parser.addoption(
+        "--ib-confirm",
+        action="store_true",
+        default=False,
+        help="Run tests marked 'requires_ib' with interactive TWS confirmation.",
+    )
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Auto-skip ``requires_ib`` tests unless ``--ib-confirm`` is passed."""
+
+    if config.getoption("--ib-confirm"):
+        return
+
+    skip_ib = pytest.mark.skip(
+        reason="IB tests require --ib-confirm flag and a running TWS/Gateway."
+    )
+    for item in items:
+        if "requires_ib" in item.keywords:
+            item.add_marker(skip_ib)
+
+
 class MockBrokerConnection:
     """Lightweight broker connection stub for tests."""
 
