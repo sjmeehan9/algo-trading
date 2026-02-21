@@ -9,6 +9,12 @@ from algotrading.src.trainers.exceptions import (
     TrainerError,
     TrainingError,
 )
+from algotrading.src.trainers.ml_trainer import (
+    MLPrediction,
+    MLTrainer,
+    MLTrainingConfig,
+    MLTrainingResult,
+)
 from algotrading.src.trainers.rl_trainer import (
     EvaluationResult,
     RLTrainer,
@@ -21,6 +27,10 @@ __all__ = [
     "TrainingConfig",
     "TrainingResult",
     "EvaluationResult",
+    "MLTrainer",
+    "MLTrainingConfig",
+    "MLTrainingResult",
+    "MLPrediction",
     "TrainerError",
     "ModelNotTrainedError",
     "ModelLoadError",
