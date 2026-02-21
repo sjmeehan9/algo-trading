@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from algotrading.src.broker import OrderSide, OrderType
 from algotrading.src.data_sourcing.stream_faker import StreamFaker
 from algotrading.src.trading.order import OrderManager
 from algotrading.src.trading.tools import TradingTools
@@ -139,7 +140,7 @@ def test_trading_session_with_fake_data(
 def test_order_manager_integration(
     integration_config: dict, integration_pipeline_rl: dict
 ) -> None:
-    """Verify OrderManager builds order specs and order objects correctly."""
+    """Verify OrderManager builds broker-agnostic order specs correctly."""
 
     manager = OrderManager(integration_config, integration_pipeline_rl)
     state_df = pd.DataFrame({"close": [100.0, 101.0]})
@@ -155,7 +156,8 @@ def test_order_manager_integration(
     order, active_pos = manager.buildOrder(spec[0], int(spec[1]))
 
     assert spec[0] == "BUY"
-    assert order.action == "BUY"
+    assert order.side == OrderSide.BUY
+    assert order.order_type == OrderType.MARKET
     assert active_pos == "BUY_PEND"
 
 

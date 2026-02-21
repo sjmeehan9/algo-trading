@@ -1,11 +1,17 @@
 import datetime
 import logging
-from threading import Thread, Timer
+from threading import Timer
 
 import pandas as pd
-from ibapi.client import EClient
-from ibapi.contract import Contract
-from ibapi.wrapper import EWrapper
+from algotrading.src.broker import (
+    AccountInfo,
+    BrokerAdapter,
+    ContractSpec,
+    InstrumentType,
+    InteractiveBrokersAdapter,
+    OrderStatus,
+    PositionInfo,
+)
 
 from ..exceptions import BrokerConnectionError
 from ..models.predict import Predict
@@ -16,33 +22,82 @@ from .tools import TradingTools
 logger = logging.getLogger(__name__)
 
 
-class Trading(EWrapper, EClient):
+class Trading:
+    """Orchestrates live trading through a broker adapter.
+
+    Routes order placement, cancellation, and account/position updates
+    through an injected ``BrokerAdapter``, preserving the existing position
+    state-machine and prediction-driven trading algorithm.
+    """
+
     ELIGABLE_STREAM = "real"
     TRADE_TIMER = 4
     CURRENT_POS_LIST = []
     ACTIONS = {0: "NONE", 1: "BUY", 2: "SELL", "NONE": 0, "BUY": 1, "SELL": 2}
 
-    def __init__(self, config: dict, pipeline: dict):
-        EClient.__init__(self, self)
+    def __init__(
+        self,
+        config: dict,
+        pipeline: dict,
+        adapter: BrokerAdapter | None = None,
+    ):
+        """Initialise trading session.
 
+        Args:
+            config: Application configuration dictionary.
+            pipeline: Pipeline configuration dictionary.
+            adapter: Broker adapter instance; defaults to
+                ``InteractiveBrokersAdapter`` when *None*.
+        """
         self.logger = logger
 
         self.config = config
         self.pipeline = pipeline
+        self.adapter = adapter if adapter is not None else InteractiveBrokersAdapter()
 
         self.predict = Predict(self.config, self.pipeline)
         self.order = OrderManager(self.config, self.pipeline)
         self.tools = TradingTools(self.pipeline)
         self.payload = Payload()
         self.payload.action_dict = self.ACTIONS
+        self._connected = False
+        self._callbacks_registered = False
+        self.timing: Timer | None = None
+        self.timer = False
 
         contract_info = self.pipeline["pipeline"]["contract_info"]
-        self.contract = Contract()
-        self.contract.symbol = contract_info["symbol"]
-        self.contract.secType = contract_info["secType"]
-        self.contract.exchange = contract_info["exchange"]
-        self.contract.currency = contract_info["currency"]
-        self.contract.primaryExchange = contract_info["primaryExchange"]
+        instrument_type_map = {
+            "STK": InstrumentType.STOCK,
+            "OPT": InstrumentType.OPTION,
+            "FUT": InstrumentType.FUTURE,
+            "CRYPTO": InstrumentType.CRYPTO,
+            "IND": InstrumentType.INDEX,
+            "INDEX": InstrumentType.INDEX,
+        }
+        sec_type = str(contract_info["secType"]).upper()
+        if sec_type not in instrument_type_map:
+            raise ValueError(f"Unsupported secType for ContractSpec: {sec_type}")
+
+        self.contract_spec = ContractSpec(
+            symbol=contract_info["symbol"],
+            instrument_type=instrument_type_map[sec_type],
+            exchange=contract_info["exchange"],
+            currency=contract_info["currency"],
+            primary_exchange=contract_info.get("primaryExchange"),
+            expiry=contract_info.get("lastTradeDateOrContractMonth")
+            or contract_info.get("expiry"),
+            strike=(
+                float(contract_info["strike"])
+                if contract_info.get("strike") is not None
+                else None
+            ),
+            right=contract_info.get("right"),
+            multiplier=(
+                float(contract_info["multiplier"])
+                if contract_info.get("multiplier") is not None
+                else 1.0
+            ),
+        )
 
         self.account = self.config["account_number"]
         self.enable_trading = self.config["stream_data"] == self.ELIGABLE_STREAM
@@ -50,9 +105,12 @@ class Trading(EWrapper, EClient):
 
         client_id = self.pipeline["pipeline"]["client_id"]
         try:
-            super().connect(
-                self.config["ip_address"], self.config["port"], client_id["trading"]
+            self.adapter.connect(
+                self.config["ip_address"],
+                self.config["port"],
+                client_id["trading"],
             )
+            self._connected = True
         except Exception as exc:
             raise BrokerConnectionError(
                 "Failed to connect trading client",
@@ -62,44 +120,22 @@ class Trading(EWrapper, EClient):
                 context={"client_id": client_id.get("trading"), "error": str(exc)},
             ) from exc
 
-        thread = Thread(target=self.run)
-        thread.start()
-        setattr(self, "_thread", thread)
-
-        self.timer = self.setTimer()
-        Timer(self.timer, self.stop).start()
-
-    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson="") -> None:
-        self.logger.error(
-            "Broker API error | req_id=%s error_code=%s message=%s",
-            reqId,
-            errorCode,
-            errorString,
-        )
-
-    def nextValidId(self, orderId: int) -> None:
-        super().nextValidId(orderId)
-        self.nextValidOrderId = orderId
-
-        self.logger.info("Starting Trading connection")
-
         self.start()
 
-    def nextOrderId(self):
-        self.oid = self.nextValidOrderId
-        self.nextValidOrderId += 1
-        return self.oid
+        self.runtime = self.setTimer()
+        Timer(self.runtime, self.stop).start()
 
     def setTimer(self) -> int:
+        """Return the configured runtime duration in seconds."""
+
         runtime = self.pipeline["pipeline"]["live_data_config"]["runtime"]
         return runtime
 
-    # Account data updates
-    def updateAccountValue(
-        self, key: str, val: str, currency: str, accountName: str
-    ) -> None:
-        if key == "CashBalance" and currency == self.contract.currency:
-            self.payload.cashbalance = float(val)
+    def _on_account_update(self, account_info: AccountInfo) -> None:
+        """Handle account snapshot updates from the broker adapter."""
+
+        if account_info.currency == self.contract_spec.currency:
+            self.payload.cashbalance = float(account_info.cash_balance)
 
             self.logger.info(f"cashbalance: {self.payload.cashbalance}")
 
@@ -112,19 +148,11 @@ class Trading(EWrapper, EClient):
                     )
                 )
 
-    def updatePortfolio(
-        self,
-        contract: Contract,
-        position: float,
-        marketPrice: float,
-        marketValue: float,
-        averageCost: float,
-        unrealizedPNL: float,
-        realizedPNL: float,
-        accountName: str,
-    ) -> None:
-        if contract.symbol == self.contract.symbol:
-            self.payload.openunits = position
+    def _on_position_update(self, position: PositionInfo) -> None:
+        """Handle position updates from the broker adapter."""
+
+        if position.contract.symbol == self.contract_spec.symbol:
+            self.payload.openunits = float(position.quantity)
 
             self.logger.info(f"openunits: {self.payload.openunits}")
 
@@ -137,36 +165,36 @@ class Trading(EWrapper, EClient):
                     )
                 )
 
-    def updateAccountTime(self, timeStamp: str) -> None:
-        self.logger.info(f"Account time update: {timeStamp}")
-
     def confirmTrades(self) -> None:
+        """Release trade lock when state data has been updated."""
+
         if self.payload.update_state_data:
             self.payload.release_trade = True
             self.payload.update_state_data = False
 
         return None
 
-    def orderStatus(
-        self,
-        orderId,
-        status,
-        filled,
-        remaining,
-        avgFillPrice,
-        permId,
-        parentId,
-        lastFillPrice,
-        clientId,
-        whyHeld,
-        mktCapPrice,
-    ) -> None:
+    def _on_order_status(self, status_update: OrderStatus) -> None:
+        """Handle order status transitions from the broker adapter."""
+
+        if len(self.payload.order_spec) < 3:
+            return
+
+        status = status_update.status
+        filled = status_update.filled_quantity
+        avg_fill_price = status_update.average_fill_price
+
         self.logger.info(
-            f"OrderStatus. Id: {orderId}, Status: {status}, {filled}, {remaining}, {avgFillPrice}, {permId}, {parentId}, {lastFillPrice}, {clientId}, {whyHeld}, {mktCapPrice}"
+            "OrderStatus. Id: %s, Status: %s, %s, %s, %s",
+            status_update.order_id,
+            status,
+            status_update.filled_quantity,
+            status_update.remaining_quantity,
+            status_update.average_fill_price,
         )
 
         if (
-            (status == "PreSubmitted" or status == "Submitted")
+            (status == "PENDING" or status == "SUBMITTED")
             and filled == 0
             and self.payload.order_spec[2] == "open"
         ):
@@ -179,11 +207,11 @@ class Trading(EWrapper, EClient):
             )
 
         elif (
-            (status == "PreSubmitted" or status == "Submitted")
+            (status == "SUBMITTED" or status == "PARTIAL")
             and filled > 0
             and self.payload.order_spec[2] == "open"
         ):
-            self.payload.last_price = avgFillPrice
+            self.payload.last_price = float(avg_fill_price or self.payload.last_price)
             self.payload.last_pos = self.payload.order_spec[0]
             self.payload.active_pos = "{}_PART".format(self.payload.temp_action)
 
@@ -191,23 +219,26 @@ class Trading(EWrapper, EClient):
                 f"PART, {self.payload.active_pos}, {self.payload.last_pos}, {self.payload.last_price}"
             )
 
-        elif status == "Filled":
+        elif status == "FILLED":
             self.payload.active_pos = "{}_FILL".format(self.payload.temp_action)
-            self.timing.cancel()
+            if self.timing is not None:
+                self.timing.cancel()
             self.timer = False
 
-            self.payload.last_price = avgFillPrice
+            self.payload.last_price = float(avg_fill_price or self.payload.last_price)
             self.payload.last_pos = self.payload.order_spec[0]
 
             self.logger.info(
                 f"FILL, {self.payload.active_pos}, {self.payload.last_pos}, {self.payload.last_price}"
             )
 
-    def stopCancel(self, orderId) -> None:
+    def stopCancel(self, orderId: str) -> None:
+        """Cancel a pending or partially-filled order via the adapter."""
+
         self.logger.info(f"order cancelled: {orderId}, {self.payload.active_pos}")
 
         if "_PEND" in self.payload.active_pos or "_PART" in self.payload.active_pos:
-            self.cancelOrder(orderId, "")
+            self.adapter.cancel_order(str(orderId))
             self.timer = False
 
             if "_PEND" in self.payload.active_pos:
@@ -217,6 +248,8 @@ class Trading(EWrapper, EClient):
                 self.payload.active_pos = "{}_FILL".format(self.payload.temp_action)
 
     def tradingAlgorithm(self, state: dict, state_df: pd.DataFrame) -> None:
+        """Run the prediction-driven trading algorithm for a single tick."""
+
         self.logger.info(f"Pre action payload: {self.payload}")
 
         if self.payload.release_trade == True:
@@ -252,6 +285,8 @@ class Trading(EWrapper, EClient):
         return None
 
     def executeOrder(self) -> None:
+        """Build and submit an order through the broker adapter."""
+
         self.payload.previous_pos = self.payload.active_pos
 
         self.payload.temp_action = self.payload.action_str
@@ -271,7 +306,7 @@ class Trading(EWrapper, EClient):
         )
 
         try:
-            self.placeOrder(self.nextOrderId(), self.contract, order)
+            self.oid = self.adapter.place_order(self.contract_spec, order)
         except Exception as exc:
             self.logger.error("Order placement failed")
             raise BrokerConnectionError(
@@ -280,7 +315,7 @@ class Trading(EWrapper, EClient):
                 host=self.config.get("ip_address"),
                 port=self.config.get("port"),
                 context={
-                    "symbol": self.contract.symbol,
+                    "symbol": self.contract_spec.symbol,
                     "action": self.payload.temp_action,
                     "order_spec": self.payload.order_spec,
                     "error": str(exc),
@@ -290,14 +325,30 @@ class Trading(EWrapper, EClient):
         return None
 
     def start(self) -> None:
-        self.logger.info("Calling reqAccountUpdates")
+        """Register adapter callbacks and hydrate initial account state."""
 
-        self.reqAccountUpdates(True, self.account)
+        self.logger.info("Starting trading callbacks")
+
+        if not self._callbacks_registered:
+            self.adapter.register_order_callback(self._on_order_status)
+            self.adapter.subscribe_account_updates(self._on_account_update)
+            self.adapter.subscribe_position_updates(self._on_position_update)
+            self._callbacks_registered = True
+
+        try:
+            account = self.adapter.get_account_info()
+            self._on_account_update(account)
+        except Exception:
+            self.logger.info("Account snapshot not yet available; waiting for callback")
+
+        for position in self.adapter.get_positions():
+            self._on_position_update(position)
 
     def stop(self) -> None:
+        """Disconnect from the broker adapter."""
+
         self.logger.info("Trading connection closed")
 
-        self.reqAccountUpdates(False, self.account)
-
-        self.done = True
-        self.disconnect()
+        if self._connected:
+            self.adapter.disconnect()
+            self._connected = False

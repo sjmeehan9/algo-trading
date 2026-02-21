@@ -70,6 +70,7 @@ class InteractiveBrokersAdapter(BrokerAdapter, EWrapper, EClient):
         self._account_currency: str | None = None
         self._cash_balance: float = 0.0
         self._buying_power: float = 0.0
+        self._account_updates_requested = False
 
         self._positions: dict[str, PositionInfo] = {}
         self._order_status: dict[str, OrderStatus] = {}
@@ -130,7 +131,15 @@ class InteractiveBrokersAdapter(BrokerAdapter, EWrapper, EClient):
             event.set()
 
         if self.isConnected():
+            if self._account_updates_requested:
+                try:
+                    self.reqAccountUpdates(False, self._account_id or "")
+                except Exception:
+                    self.logger.debug(
+                        "Failed to disable reqAccountUpdates on disconnect"
+                    )
             EClient.disconnect(self)
+        self._account_updates_requested = False
 
     def is_connected(self) -> bool:
         """Return whether the adapter is connected to IB."""
@@ -355,6 +364,7 @@ class InteractiveBrokersAdapter(BrokerAdapter, EWrapper, EClient):
 
         if snapshot is not None:
             callback(snapshot)
+        self._ensure_account_updates_subscription()
 
     def subscribe_position_updates(self, callback: PositionCallback) -> None:
         """Register callback for position updates."""
@@ -365,6 +375,7 @@ class InteractiveBrokersAdapter(BrokerAdapter, EWrapper, EClient):
 
         for position in positions:
             callback(position)
+        self._ensure_account_updates_subscription()
 
     def get_next_order_id(self) -> str:
         """Return and advance the next available IB order id."""
@@ -400,6 +411,7 @@ class InteractiveBrokersAdapter(BrokerAdapter, EWrapper, EClient):
         with self._lock:
             if not self._account_id:
                 self._account_id = account_ids[0]
+        self._ensure_account_updates_subscription(force=True)
 
     def historicalData(self, reqId: int, bar: object) -> None:
         """IB callback: append historical bar to request buffer."""
@@ -617,6 +629,22 @@ class InteractiveBrokersAdapter(BrokerAdapter, EWrapper, EClient):
                 return
             self._network_thread = threading.Thread(target=self.run, daemon=True)
             self._network_thread.start()
+
+    def _ensure_account_updates_subscription(self, force: bool = False) -> None:
+        if not self.isConnected():
+            return
+
+        with self._lock:
+            if self._account_updates_requested and not force:
+                return
+            account_code = self._account_id or ""
+
+        try:
+            self.reqAccountUpdates(True, account_code)
+            with self._lock:
+                self._account_updates_requested = True
+        except Exception:
+            self.logger.debug("Failed to start reqAccountUpdates subscription")
 
     def _next_req_id(self) -> int:
         with self._lock:
