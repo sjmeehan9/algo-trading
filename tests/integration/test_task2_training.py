@@ -57,12 +57,12 @@ def test_short_training_run(
         del env_name
         return object()
 
-    def _fake_train_ppo(self: TrainRL) -> None:
+    def _fake_run_training(self: TrainRL) -> None:
         model_path = Path(self.path_dict["model_filepath"] + ".zip")
         model_path.write_bytes(b"ppo-model")
 
     monkeypatch.setattr(TrainRL, "env_factory", _fake_env_factory)
-    monkeypatch.setattr(TrainRL, "train_ppo", _fake_train_ppo)
+    monkeypatch.setattr(TrainRL, "run_training", _fake_run_training)
 
     trainer = TrainML(config, integration_pipeline_rl)
     trainer.start()
@@ -135,17 +135,13 @@ def test_training_different_algorithms(
         del env_name
         return object()
 
-    def _fake_train_ppo(self: TrainRL) -> None:
-        called["ppo"] = True
-        Path(self.path_dict["model_filepath"] + ".zip").write_bytes(b"ppo")
-
-    def _fake_train_dqn(self: TrainRL) -> None:
-        called["dqn"] = True
-        Path(self.path_dict["model_filepath"] + ".zip").write_bytes(b"dqn")
+    def _fake_run_training(self: TrainRL) -> None:
+        called[self.model_type] = True
+        payload = self.model_type.encode("utf-8")
+        Path(self.path_dict["model_filepath"] + ".zip").write_bytes(payload)
 
     monkeypatch.setattr(TrainRL, "env_factory", _fake_env_factory)
-    monkeypatch.setattr(TrainRL, "train_ppo", _fake_train_ppo)
-    monkeypatch.setattr(TrainRL, "train_dqn", _fake_train_dqn)
+    monkeypatch.setattr(TrainRL, "run_training", _fake_run_training)
 
     trainer = TrainML(config, pipeline)
     trainer.start()
