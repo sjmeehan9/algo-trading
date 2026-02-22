@@ -72,11 +72,3 @@ Adjust the `config.yml` and pipeline json file settings, make the task selection
 - Ensure the TWS application is running on your local machine when running tasks 1 and 3
 
 Contact me if you would like an explanation of the project, and help to scale any of the functionality.
-
-## Appendix
-
-#### Classes
-![Class Diagram](docs/20241210_classes_algotrading.png)
-
-#### Call Graph
-![Call Graph](docs/20241210_call_graph.png)
