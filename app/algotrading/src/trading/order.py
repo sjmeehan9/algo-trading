@@ -1,80 +1,114 @@
 import logging
-from ibapi.order import Order
+
 import pandas as pd
+from algotrading.src.broker import OrderSide, OrderSpec, OrderType
+
 
 class OrderManager:
+    """Build and validate broker-agnostic order specifications."""
+
     def __init__(self, config: dict, pipeline: dict):
+        """Initialise the order manager.
+
+        Args:
+            config: Application configuration dictionary.
+            pipeline: Pipeline configuration dictionary.
+        """
+
         self.logger = logging.getLogger(__name__)
 
         self.config = config
         self.pipeline = pipeline
 
-        self.order_type = self.pipeline['pipeline']['trading_config']['order_type']
-        self.contract_price = self.pipeline['pipeline']['trading_config']['price_key']
-        self.balance_multiplier = self.pipeline['pipeline']['trading_config']['balance_multiplier']
-
+        self.order_type = self.pipeline["pipeline"]["trading_config"]["order_type"]
+        self.contract_price = self.pipeline["pipeline"]["trading_config"]["price_key"]
+        self.balance_multiplier = self.pipeline["pipeline"]["trading_config"][
+            "balance_multiplier"
+        ]
 
     def checkAction(self, action, active_pos) -> bool:
-        self.logger.info(f'Action: {action}, Active position: {active_pos}')
-        if action != 'NONE' and action != active_pos and '_PEND' not in active_pos and '_PART' not in active_pos and '_FILL' not in active_pos:
+        self.logger.info(f"Action: {action}, Active position: {active_pos}")
+        if (
+            action != "NONE"
+            and action != active_pos
+            and "_PEND" not in active_pos
+            and "_PART" not in active_pos
+            and "_FILL" not in active_pos
+        ):
             return True
         else:
             return False
-
 
     def priceAction(self, state_df: pd.DataFrame) -> float:
         price = state_df[self.contract_price].iloc[-1]
 
         return price
-        
 
     def calcOrderSpec(self, balance, units, action, activePos, price) -> list:
         adj_balance = balance * self.balance_multiplier
         unit_amt = round(adj_balance / price, 0)
         mod_string = activePos + action
-        
+
         if units == 0:
             units = unit_amt
-        
-        self.logger.info(f'Figures: adj_balance {adj_balance}, unit_amt {unit_amt}, mod_string {mod_string}')
-        
-        action_dict = {'NONEBUY': ['BUY', unit_amt, 'open'],
-                       'SELLBUY': ['NONE', abs(units), 'close'],
-                       'NONESELL': ['SELL', unit_amt, 'open'],
-                       'BUYSELL': ['NONE', abs(units), 'close']}
-        
-        self.logger.info(f'Order spec: {action_dict[mod_string]}')
-        
+
+        self.logger.info(
+            f"Figures: adj_balance {adj_balance}, unit_amt {unit_amt}, mod_string {mod_string}"
+        )
+
+        action_dict = {
+            "NONEBUY": ["BUY", unit_amt, "open"],
+            "SELLBUY": ["NONE", abs(units), "close"],
+            "NONESELL": ["SELL", unit_amt, "open"],
+            "BUYSELL": ["NONE", abs(units), "close"],
+        }
+
+        self.logger.info(f"Order spec: {action_dict[mod_string]}")
+
         return action_dict[mod_string]
 
+    def buildOrder(self, orderAction: str, units: float) -> tuple[OrderSpec, str]:
+        """Build a broker-agnostic order specification.
 
-    def buildOrder(self, orderAction, units) -> tuple:
-        
-        order = Order()
-        order.action = orderAction
-        order.totalQuantity = units
-        order.orderType = self.order_type
-        order.eTradeOnly = False
-        order.firmQuoteOnly = False
-        
-        self.logger.info(f'trade units: {units}')
-        
-        active_pos = '{}_PEND'.format(orderAction)
+        Args:
+            orderAction: Order direction (``"BUY"`` or ``"SELL"``).
+            units: Number of units to trade.
+
+        Returns:
+            Tuple of the ``OrderSpec`` and the new active position tag.
+        """
+
+        side = OrderSide.BUY if orderAction == "BUY" else OrderSide.SELL
+        order_type_map = {
+            "MKT": OrderType.MARKET,
+            "LMT": OrderType.LIMIT,
+            "STP": OrderType.STOP,
+            "STP LMT": OrderType.STOP_LIMIT,
+        }
+        order_type = order_type_map.get(str(self.order_type).upper(), OrderType.MARKET)
+        order = OrderSpec(
+            side=side,
+            quantity=float(units),
+            order_type=order_type,
+        )
+
+        self.logger.info(f"trade units: {units}")
+
+        active_pos = "{}_PEND".format(orderAction)
 
         return order, active_pos
 
-
     def positionUnlock(self, active_position, balance_figure, balance_list) -> tuple:
-        
+
         balance_list.append(balance_figure)
-        
-        if '_FILL' in active_position and len(balance_list) == 2:
+
+        if "_FILL" in active_position and len(balance_list) == 2:
             update_state_data = True
             balance_list = []
-            
+
         else:
             update_state_data = False
-            
-        self.logger.info(f'{update_state_data}, {balance_list}')
-        
+
+        self.logger.info(f"{update_state_data}, {balance_list}")
+
         return update_state_data, balance_list

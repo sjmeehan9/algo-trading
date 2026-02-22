@@ -1,11 +1,23 @@
+"""Live market data streaming via broker adapter.
+
+This module provides the ``LiveData`` class which performs a historical
+warmup fetch followed by a real-time bar subscription through any
+``BrokerAdapter`` implementation, feeding incoming data into a
+``StreamQueue`` for downstream consumption.
+"""
+
 import datetime
 import logging
 import os
 from pathlib import Path
 
-from ibapi.client import EClient
-from ibapi.contract import Contract
-from ibapi.wrapper import EWrapper
+from algotrading.src.broker import (
+    BarData,
+    BrokerAdapter,
+    ContractSpec,
+    InstrumentType,
+    InteractiveBrokersAdapter,
+)
 
 from ..exceptions import BrokerConnectionError, DataError
 from ..load_config import config_loader
@@ -14,20 +26,41 @@ from .stream_queue import StreamQueue
 logger = logging.getLogger(__name__)
 
 
-class LiveData(EWrapper, EClient):
+class LiveData:
+    """Stream live market data using a broker adapter.
+
+    Performs an initial historical data warmup, validates temporal
+    continuity, then subscribes to real-time bars and routes them
+    into a ``StreamQueue`` for downstream processing.
+
+    Args:
+        config: Runtime configuration dictionary.
+        pipeline: Pipeline configuration dictionary.
+        adapter: Optional broker adapter; defaults to
+            ``InteractiveBrokersAdapter``.
+    """
+
     CONFIG_FILENAME = "live_streaming.yml"
     HISTORICAL_CONFIG = "historical_data.yml"
     CURRENT_BAR = ""
     INIT_REQUEST_ID = 1000
     DATE_COLUMN = "date"
 
-    def __init__(self, config: dict, pipeline: dict):
-        EClient.__init__(self, self)
+    def __init__(
+        self,
+        config: dict,
+        pipeline: dict,
+        adapter: BrokerAdapter | None = None,
+    ):
 
         self.logger = logger
 
         self.config = config
         self.pipeline = pipeline
+        self.adapter = adapter if adapter is not None else InteractiveBrokersAdapter()
+        self.done = False
+        self._connected = False
+        self._subscription_id: int | None = None
 
         self.queue = StreamQueue(self.config, self.pipeline)
 
@@ -43,12 +76,37 @@ class LiveData(EWrapper, EClient):
         self.historical_config = config_loader(historical_config_path, validate=False)
 
         contract_info = self.pipeline["pipeline"]["contract_info"]
-        self.contract = Contract()
-        self.contract.symbol = contract_info["symbol"]
-        self.contract.secType = contract_info["secType"]
-        self.contract.exchange = contract_info["exchange"]
-        self.contract.currency = contract_info["currency"]
-        self.contract.primaryExchange = contract_info["primaryExchange"]
+        instrument_type_map = {
+            "STK": InstrumentType.STOCK,
+            "OPT": InstrumentType.OPTION,
+            "FUT": InstrumentType.FUTURE,
+            "CRYPTO": InstrumentType.CRYPTO,
+            "IND": InstrumentType.INDEX,
+            "INDEX": InstrumentType.INDEX,
+        }
+        sec_type = str(contract_info["secType"]).upper()
+        if sec_type not in instrument_type_map:
+            raise ValueError(f"Unsupported secType for ContractSpec: {sec_type}")
+
+        self.contract_spec = ContractSpec(
+            symbol=contract_info["symbol"],
+            instrument_type=instrument_type_map[sec_type],
+            exchange=contract_info["exchange"],
+            currency=contract_info["currency"],
+            primary_exchange=contract_info.get("primaryExchange"),
+            expiry=contract_info.get("lastTradeDateOrContractMonth")
+            or contract_info.get("expiry"),
+            strike=(
+                float(contract_info["strike"]) if "strike" in contract_info else None
+            ),
+            right=contract_info.get("right"),
+            multiplier=(
+                float(contract_info["multiplier"])
+                if "multiplier" in contract_info
+                and contract_info["multiplier"] is not None
+                else 1.0
+            ),
+        )
 
         self.live_info = self.pipeline["pipeline"]["live_data_config"]
         self.historical_info = self.pipeline["pipeline"]["historical_data_config"]
@@ -63,17 +121,20 @@ class LiveData(EWrapper, EClient):
 
         self.timer = self.setTimer()
 
-    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson="") -> None:
-        self.logger.error(
-            "Broker API error | req_id=%s error_code=%s message=%s",
-            reqId,
-            errorCode,
-            errorString,
-        )
+    def connect(self, ip_address: str, port: int, client_id: int) -> None:
+        """Establish a broker connection for live data streaming.
 
-    def connect(self, ip_address, port, client_id):
+        Args:
+            ip_address: Broker gateway host address.
+            port: Broker gateway port.
+            client_id: Unique client identifier for this connection.
+
+        Raises:
+            BrokerConnectionError: If the connection attempt fails.
+        """
         try:
-            super().connect(ip_address, port, client_id)
+            self.adapter.connect(ip_address, port, client_id)
+            self._connected = True
         except Exception as exc:
             raise BrokerConnectionError(
                 "Failed to connect for live streaming",
@@ -83,31 +144,41 @@ class LiveData(EWrapper, EClient):
                 context={"client_id": client_id, "error": str(exc)},
             ) from exc
 
-    def nextValidId(self, orderId: int) -> None:
-        super().nextValidId(orderId)
-        self.nextValidOrderId = orderId
+    def run(self) -> None:
+        """Start the live data streaming workflow.
 
-        self.logger.info(f"Starting LiveData connection: {self.nextValidOrderId}")
-
+        Raises:
+            BrokerConnectionError: If called before ``connect``.
+        """
+        if not self._connected:
+            raise BrokerConnectionError(
+                "LiveData.run called before broker connection was established",
+                broker_name="interactive_brokers",
+                host=self.config.get("ip_address"),
+                port=self.config.get("port"),
+                context={"client_id": self.pipeline["pipeline"]["client_id"]["live"]},
+            )
         self.start()
 
+    def disconnect(self) -> None:
+        """Disconnect the broker adapter and reset connection state."""
+        self.adapter.disconnect()
+        self._connected = False
+
     def setTimer(self) -> int:
+        """Return the configured streaming runtime in seconds."""
         runtime = self.pipeline["pipeline"]["live_data_config"]["runtime"]
         return runtime
 
     def sendRequests(self) -> None:
+        """Perform historical warmup and start the real-time subscription."""
         try:
-            self.reqHistoricalData(
-                self.req_it,
-                self.contract,
-                "",
+            bars = self.adapter.request_historical_data(
+                self.contract_spec,
+                datetime.datetime.now(datetime.timezone.utc),
                 self.step_size["durationString"],
                 self.historical_info["barSizeSetting"],
                 self.historical_info["whatToShow"],
-                1,
-                2,
-                False,
-                [],
             )
         except Exception as exc:
             raise BrokerConnectionError(
@@ -118,32 +189,7 @@ class LiveData(EWrapper, EClient):
                 context={"request_id": self.req_it, "error": str(exc)},
             ) from exc
 
-    # Receive historical data
-    def historicalData(self, reqId, bar) -> None:
-
-        if not self.CURRENT_BAR:
-            self.CURRENT_BAR = bar.date
-
-        elif self.CURRENT_BAR != bar.date:
-            new_row = {
-                self.historical_columns["bar_date"]: int(bar.date),
-                self.historical_columns["bar_open"]: bar.open,
-                self.historical_columns["bar_high"]: bar.high,
-                self.historical_columns["bar_low"]: bar.low,
-                self.historical_columns["bar_close"]: bar.close,
-                self.historical_columns["bar_volume"]: bar.volume,
-                self.historical_columns["bar_wap"]: bar.wap,
-                self.historical_columns["bar_barCount"]: bar.barCount,
-            }
-            self.data_list.append(new_row)
-            self.CURRENT_BAR = bar.date
-
-    def historicalDataEnd(self, reqId: int, start: str, end: str) -> None:
-
-        self.cancelHistoricalData(reqId)
-
-        self.req_it += 1
-
+        self.data_list = [self._bar_to_historical_row(bar) for bar in bars]
         self.CURRENT_BAR = ""
 
         self.data_validation = self.dataValidation()
@@ -156,16 +202,65 @@ class LiveData(EWrapper, EClient):
             )
             self.data_list = []
 
-        self.reqRealTimeBars(
-            self.req_it,
-            self.contract,
-            self.live_info["barSizeSetting"],
-            self.live_info["whatToShow"],
-            True,
-            [],
+        self._subscription_id = self.adapter.subscribe_realtime_data(
+            contract=self.contract_spec,
+            bar_size=self.live_info["barSizeSetting"],
+            data_type=self.live_info["whatToShow"],
+            callback=self._on_realtime_bar,
         )
 
+    def _bar_to_historical_row(self, bar: BarData) -> dict[str, object]:
+        return {
+            self.historical_columns["bar_date"]: int(bar.timestamp.timestamp()),
+            self.historical_columns["bar_open"]: bar.open,
+            self.historical_columns["bar_high"]: bar.high,
+            self.historical_columns["bar_low"]: bar.low,
+            self.historical_columns["bar_close"]: bar.close,
+            self.historical_columns["bar_volume"]: bar.volume,
+            self.historical_columns["bar_wap"]: bar.vwap,
+            self.historical_columns["bar_barCount"]: bar.trade_count,
+        }
+
+    def _bar_to_live_row(self, bar: BarData) -> dict[str, object]:
+        return {
+            self.bar_columns["bar_date"]: int(bar.timestamp.timestamp()),
+            self.bar_columns["bar_open"]: bar.open,
+            self.bar_columns["bar_high"]: bar.high,
+            self.bar_columns["bar_low"]: bar.low,
+            self.bar_columns["bar_close"]: bar.close,
+            self.bar_columns["bar_volume"]: bar.volume,
+            self.bar_columns["bar_wap"]: bar.vwap,
+            self.bar_columns["bar_barCount"]: bar.trade_count,
+        }
+
+    def _on_realtime_bar(self, bar: BarData) -> None:
+        time = int(bar.timestamp.timestamp())
+        new_row = self._bar_to_live_row(bar)
+
+        self.logger.info("Start of trade data flow: %s", datetime.datetime.now())
+
+        if not self.CURRENT_BAR:
+            process = self.connectDates(time)
+            if process:
+                self.data_list.append(new_row)
+                self.queue.put(self.data_list)
+                self.CURRENT_BAR = time
+
+        elif self.CURRENT_BAR != time:
+            self.queue.put(new_row)
+
+            self.CURRENT_BAR = time
+
     def dataValidation(self) -> bool:
+        """Validate temporal continuity of the historical warmup bars.
+
+        Returns:
+            ``True`` if bars span a contiguous time range with the
+            expected increment.
+
+        Raises:
+            DataError: If no bars were received in the warmup.
+        """
         dates = [int(d[self.DATE_COLUMN]) for d in self.data_list]
 
         if not dates:
@@ -196,6 +291,15 @@ class LiveData(EWrapper, EClient):
         return True
 
     def connectDates(self, time: int) -> bool:
+        """Determine whether the first real-time bar connects to history.
+
+        Args:
+            time: Unix timestamp of the incoming real-time bar.
+
+        Returns:
+            ``True`` if the bar should be appended and processing
+            should begin; ``False`` if data should be discarded.
+        """
         connect_time = time - self.time_increment
 
         if connect_time == self.end_date:
@@ -215,46 +319,21 @@ class LiveData(EWrapper, EClient):
             )
             return False
 
-    # Receive live data
-    def realtimeBar(
-        self, reqId, time, open_, high, low, close, volume, wap, count
-    ) -> None:
-
-        self.logger.info("Start of trade data flow: %s", datetime.datetime.now())
-
-        new_row = {
-            self.bar_columns["bar_date"]: time,
-            self.bar_columns["bar_open"]: open_,
-            self.bar_columns["bar_high"]: high,
-            self.bar_columns["bar_low"]: low,
-            self.bar_columns["bar_close"]: close,
-            self.bar_columns["bar_volume"]: volume,
-            self.bar_columns["bar_wap"]: wap,
-            self.bar_columns["bar_barCount"]: count,
-        }
-
-        if not self.CURRENT_BAR:
-            process = self.connectDates(time)
-            if process:
-                self.data_list.append(new_row)
-                self.queue.put(self.data_list)
-                self.CURRENT_BAR = time
-
-        elif self.CURRENT_BAR != time:
-            self.queue.put(new_row)
-
-            self.CURRENT_BAR = time
-
     def start(self) -> None:
+        """Initialize request tracking and begin the streaming flow."""
         self.req_it = self.INIT_REQUEST_ID
 
         # Request live realTimeBars data
         self.sendRequests()
 
     def stop(self) -> None:
+        """Unsubscribe from real-time data and disconnect the broker."""
         self.logger.info("LiveData connection closed")
 
-        self.cancelRealTimeBars(self.req_it)
+        if self._subscription_id is not None:
+            self.adapter.unsubscribe_realtime_data(self._subscription_id)
+            self._subscription_id = None
 
         self.done = True
-        self.disconnect()
+        self.adapter.disconnect()
+        self._connected = False

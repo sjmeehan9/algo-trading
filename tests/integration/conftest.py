@@ -218,24 +218,24 @@ def trained_model_path(
     if existing_model.exists():
         existing_model.unlink()
 
-    original_train_ppo = TrainRL.train_ppo
+    original_run_training = TrainRL.run_training
     original_env_factory = TrainRL.env_factory
 
     def _fake_env_factory(self: TrainRL, env_name: str) -> object:
         del env_name
         return object()
 
-    def _fake_train_ppo(self: TrainRL) -> None:
+    def _fake_run_training(self: TrainRL) -> None:
         model_file = Path(self.path_dict["model_filepath"] + ".zip")
         model_file.parent.mkdir(parents=True, exist_ok=True)
         model_file.write_bytes(b"integration-model")
 
     TrainRL.env_factory = _fake_env_factory
-    TrainRL.train_ppo = _fake_train_ppo
+    TrainRL.run_training = _fake_run_training
     try:
         trainer = TrainML(integration_config, integration_pipeline_rl)
         trainer.start()
         return Path(trainer.path_dict["model_filepath"] + ".zip")
     finally:
-        TrainRL.train_ppo = original_train_ppo
+        TrainRL.run_training = original_run_training
         TrainRL.env_factory = original_env_factory
