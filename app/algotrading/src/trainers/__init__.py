@@ -21,6 +21,7 @@ from algotrading.src.trainers.rl_trainer import (
     TrainingConfig,
     TrainingResult,
 )
+from algotrading.src.trainers.sb3_trainer import SB3Algorithm, StableBaselines3Trainer
 
 __all__ = [
     "RLTrainer",
@@ -31,6 +32,8 @@ __all__ = [
     "MLTrainingConfig",
     "MLTrainingResult",
     "MLPrediction",
+    "SB3Algorithm",
+    "StableBaselines3Trainer",
     "TrainerError",
     "ModelNotTrainedError",
     "ModelLoadError",
