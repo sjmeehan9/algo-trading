@@ -1,79 +1,113 @@
-from datetime import datetime
 import logging
-import numpy as np
 import os
+from datetime import datetime
+from typing import Any, Callable
+
 import pandas as pd
-from ..data_processing.scalers import Scaler
+
+from ..data_pipeline.state.state_manager import StateConfig, StateManager
 from ..trading.trading import Trading
 
+
 class StateBuilder:
+    """Backward-compatible façade over ``StateManager``.
+
+    Retains legacy file-loading and task-routing behaviour while
+    delegating rolling-window state construction, scaling, and
+    counter management to ``StateManager``.
+    """
+
     START_DATEPART = -4
     END_DATEPART = -8
 
-    def __init__(self, config: dict, pipeline: dict, custom_logic: object):
+    def __init__(self, config: dict, pipeline: dict, custom_logic: Any):
         self.logger = logging.getLogger(__name__)
 
         self.config = config
         self.pipeline = pipeline
         self.custom_logic = custom_logic
 
+        state_config = StateConfig(
+            window_size=self.pipeline["pipeline"]["state_data_config"]["past_events"],
+            columns=self.pipeline["pipeline"]["state_data_config"]["columns"],
+            scaler_type=self.pipeline["pipeline"]["state_data_config"].get(
+                "scaler", "MinMaxScaler"
+            ),
+        )
+        self.state_manager = StateManager(
+            config=state_config, custom_logic=custom_logic
+        )
+
         self.initialise_counters()
+
+        self.terminated = False
+        self.timed_out = False
+        self.file_offset = 0
+        self.file_step = 0
 
         self.live_data_function = self.initialise_live_data()
 
-
     def read_data(self, evaluate: bool) -> None:
-        data_path = self.config['data_path']
-        saved_data_path = os.path.join(data_path, 'saved_data/')
-        pipeline_name = self.pipeline['pipeline']['filename']
-        pipeline_data_path = os.path.join(saved_data_path, f'{pipeline_name}/')
+        """Load CSV files for training or evaluation and sync to StateManager."""
+        data_path = self.config["data_path"]
+        saved_data_path = os.path.join(data_path, "saved_data/")
+        pipeline_name = self.pipeline["pipeline"]["filename"]
+        pipeline_data_path = os.path.join(saved_data_path, f"{pipeline_name}/")
 
         if evaluate:
-            date_list = self.config['backtest_date_list']
+            date_list = self.config["backtest_date_list"]
         else:
-            date_list = self.config['training_date_list']
+            date_list = self.config["training_date_list"]
 
         # If date_list is empty, add all filenames in the pipeline_data_path to date_list
         if not date_list:
-            date_text = [f[:self.START_DATEPART][self.END_DATEPART:] for f in os.listdir(pipeline_data_path) if os.path.isfile(os.path.join(pipeline_data_path, f)) and f.endswith('.csv')]
+            date_text = [
+                f[: self.START_DATEPART][self.END_DATEPART :]
+                for f in os.listdir(pipeline_data_path)
+                if os.path.isfile(os.path.join(pipeline_data_path, f))
+                and f.endswith(".csv")
+            ]
 
             date_list = []
             for date_str in date_text:
                 try:
                     # Try to convert the string to a date object
-                    date_obj = datetime.strptime(date_str, '%Y%m%d')
+                    date_obj = datetime.strptime(date_str, "%Y%m%d")
                     date_list.append(date_obj)
                 except ValueError:
                     # If conversion fails, skip this element
-                    self.logger.error('No date string found in filename')
+                    self.logger.error("No date string found in filename")
                     continue
 
-        file_trim = self.pipeline['pipeline']['state_data_config']['file_trim']
+        file_trim = self.pipeline["pipeline"]["state_data_config"]["file_trim"]
 
-        contract_info = self.pipeline['pipeline']['contract_info']
+        contract_info = self.pipeline["pipeline"]["contract_info"]
 
         self.final_dataframe = pd.DataFrame()
+        current_df = pd.DataFrame()
 
         self.master_date_list = date_list.copy()
 
         for date in date_list:
-            filename = '{}_{}_{}{:02d}{:02d}.csv'.format(
-                contract_info['symbol'],
-                contract_info['primaryExchange'],
+            filename = "{}_{}_{}{:02d}{:02d}.csv".format(
+                contract_info["symbol"],
+                contract_info["primaryExchange"],
                 date.year,
                 date.month,
-                date.day
+                date.day,
             )
 
             file_path = os.path.join(pipeline_data_path, filename)
 
             if os.path.exists(file_path):
-                self.logger.info(f'Reading: {filename}')
+                self.logger.info(f"Reading: {filename}")
             else:
                 self.master_date_list.remove(date)
-                self.logger.info(f'Skipping: {filename} (file not found or not a CSV file)')
+                self.logger.info(
+                    f"Skipping: {filename} (file not found or not a CSV file)"
+                )
                 continue
-            
+
             try:
                 # Read the current CSV file into a DataFrame
                 current_df = pd.read_csv(file_path)
@@ -81,261 +115,222 @@ class StateBuilder:
                 rows_to_drop = int(len(current_df) * file_trim / 2)
 
                 current_df = current_df.iloc[rows_to_drop:-rows_to_drop]
-                
+
                 # Append the current DataFrame to the final DataFrame
-                self.final_dataframe = pd.concat([self.final_dataframe, current_df], ignore_index=True)
+                self.final_dataframe = pd.concat(
+                    [self.final_dataframe, current_df], ignore_index=True
+                )
 
             except Exception as e:
-                self.logger.info(f'Error reading {filename}: {e}')
+                self.logger.info(f"Error reading {filename}: {e}")
                 continue
 
-        self.episode_length = len(current_df) - self.pipeline['pipeline']['state_data_config']['past_events']
+        self.episode_length = (
+            len(current_df)
+            - self.pipeline["pipeline"]["state_data_config"]["past_events"]
+        )
 
         self.total_timesteps = len(self.master_date_list) * self.episode_length
-        
-        if self.pipeline['pipeline']['state_data_config']['columns']:
-            columns_keys = list(self.pipeline['pipeline']['state_data_config']['columns'].keys())
+
+        if self.pipeline["pipeline"]["state_data_config"]["columns"]:
+            columns_keys = list(
+                self.pipeline["pipeline"]["state_data_config"]["columns"].keys()
+            )
             self.final_dataframe = self.final_dataframe[columns_keys]
-        
+
+        if not isinstance(self.final_dataframe, pd.DataFrame):
+            raise TypeError("StateBuilder final_dataframe must be a pandas DataFrame")
+
+        self.state_manager.load_dataframe(self.final_dataframe)
+        self.state_manager.episode_length = self.episode_length
+        self.state_manager.total_timesteps = self.total_timesteps
+        self.state_manager.state_counters = self.state_counters
+        self.state_manager.terminated = self.terminated
+        self.state_manager.timed_out = self.timed_out
+
         return None
-    
 
     def initialise_counters(self) -> None:
+        """Reset step, window, and episode counters."""
         # Setup counters
-        self.state_counters = {
-            'step': 0,
-            'window': 0,
-            'episode': 1
-        }
+        self.state_counters = {"step": 0, "window": 0, "episode": 1}
+
+        self.state_manager.state_counters = self.state_counters
 
         return None
-    
 
     def task_state(self) -> None:
-        if self.config['task_selection'] == 'task3':
+        """Configure file offset and dataframe based on active task."""
+        if self.config["task_selection"] == "task3":
             self.file_offset = 0
             self.final_dataframe = self.queue
-        elif self.config['task_selection'] == 'task2' and self.config['data_mode'] == 'live':
+        elif (
+            self.config["task_selection"] == "task2"
+            and self.config["data_mode"] == "live"
+        ):
             self.file_offset = 0
             self.final_dataframe = self.queue
-        elif self.config['task_selection'] == 'task2' and self.config['data_mode'] == 'historical':
+        elif (
+            self.config["task_selection"] == "task2"
+            and self.config["data_mode"] == "historical"
+        ):
             self.terminated = False
             self.timed_out = False
-            self.file_offset = self.state_counters['window'] * (self.episode_length + self.window_end)
-        elif self.config['task_selection'] == 'task4':
+            self.file_offset = self.state_counters["window"] * (
+                self.episode_length + self.window_end
+            )
+        elif self.config["task_selection"] == "task4":
             self.terminated = False
             self.timed_out = False
-            self.file_offset = self.state_counters['window'] * (self.episode_length + self.window_end)
+            self.file_offset = self.state_counters["window"] * (
+                self.episode_length + self.window_end
+            )
         else:
-            self.logger.error('Data usage not supported')
-            raise NotImplementedError('Data usage not supported')
+            self.logger.error("Data usage not supported")
+            raise NotImplementedError("Data usage not supported")
+
+        self.state_manager.file_offset = self.file_offset
+        self.state_manager.file_step = self.file_offset + self.state_counters["step"]
+        self.state_manager.terminated = self.terminated
+        self.state_manager.timed_out = self.timed_out
 
         return None
 
-
     def initialise_state(self) -> None:
-
-        self.custom_variables = self.custom_logic.initialise_variables()
-
-        self.window_end = self.pipeline['pipeline']['state_data_config']['past_events']
+        """Build initial observation state via StateManager delegation."""
+        self.window_end = self.pipeline["pipeline"]["state_data_config"]["past_events"]
 
         self.task_state()
 
-        self.file_step = self.state_counters['step'] + self.file_offset
+        self.state_manager.window_end = self.window_end
+        self.state_manager.file_offset = self.file_offset
+        self.state_manager.file_step = self.state_counters["step"] + self.file_offset
+        self.state_manager.custom_logic = self.custom_logic
 
-        # Grab the first window of data
-        frame_start = self.file_step
-        frame_end = self.file_step + self.window_end
-        self.state_df = self.final_dataframe.iloc[frame_start:frame_end]
+        if not isinstance(self.final_dataframe, pd.DataFrame):
+            raise TypeError("StateBuilder final_dataframe must be a pandas DataFrame")
 
-        # Loop through model data config columns and save three lists 
-        # A key list, a scale list and an unscaled list
-        self.key_columns = []
-        self.scale_columns = []
-        self.unscaled_columns = []
-
-        for key, value in self.pipeline['pipeline']['state_data_config']['columns'].items():
-            if value[0]==True:
-                self.key_columns.append(key)
-            elif value[1]==True:
-                self.scale_columns.append(key)
-            else:
-                self.unscaled_columns.append(key)
-
-        # Create an empty dataframe
-        temp_dataframe = pd.DataFrame()
-        
-        # If scale_columns list not empty, append to a temp dataframe
-        if self.scale_columns:
-            self.scaler = Scaler(self.pipeline).scaler_factory()
-
-            temp_dataframe = self.state_df[self.scale_columns]
-
-            scaled_data = self.scaler.fit_transform(temp_dataframe)
-
-            temp_dataframe = pd.DataFrame(scaled_data, columns=self.scale_columns)
-
-        # If unscale_columns list not empty, append to temp dataframe
-        if self.unscaled_columns:
-            unscaled_df = self.state_df[self.unscaled_columns].reset_index(drop=True)
-
-            temp_dataframe = pd.concat([temp_dataframe, unscaled_df], axis=1)
-
-        # Add the default custom custom values
-        if self.custom_variables:
-            for key, value in self.custom_variables.items():
-                temp_dataframe[key] = value
-
-        # store the state dictionary
-        self.state = temp_dataframe.to_dict(orient='list')
-
-        self.state = {key: np.array(value) for key, value in self.state.items()}
+        self.state_manager.load_dataframe(self.final_dataframe)
+        self.state = self.state_manager.initialise_state()
+        self.state_df = self.state_manager.state_df
+        self.custom_variables = self.state_manager.custom_variables
+        self.key_columns = self.state_manager.key_columns
+        self.scale_columns = self.state_manager.scale_columns
+        self.unscaled_columns = self.state_manager.unscaled_columns
+        self.scaler = self.state_manager.scaler
 
         return None
 
-    
     def state_step(self, action: int) -> None:
-        self.state_counters['step'] += 1
+        """Advance state one step, delegate to StateManager."""
+        self.file_offset = self.state_counters["window"] * (
+            self.episode_length + self.window_end
+        )
+        self.state_manager.file_offset = self.file_offset
+        self.state_manager.file_step = self.state_counters["step"] + self.file_offset
+        self.state_manager.total_timesteps = self.total_timesteps
+        self.state_manager.episode_length = self.episode_length
+        self.state_manager.terminated = self.terminated
+        self.state_manager.timed_out = self.timed_out
 
-        self.file_offset = self.state_counters['window'] * (self.episode_length + self.window_end)
-
-        self.file_step = self.state_counters['step'] + self.file_offset
-
-        # Grab the next window of data
-        frame_start = self.file_step
-        frame_end = self.file_step + self.window_end
-        self.state_df = self.final_dataframe.iloc[frame_start:frame_end]
+        self.state, self.terminated = self.state_manager.state_step(action)
+        self.timed_out = self.state_manager.timed_out
+        self.state_df = self.state_manager.state_df
 
         self.logger.info(f'first frame date: {self.state_df["date"].iloc[0]}')
         self.logger.info(f'last frame date: {self.state_df["date"].iloc[-1]}')
 
-        # Create an empty dataframe
-        temp_dataframe = pd.DataFrame()
-        
-        # If scale_columns list not empty, append to a temp dataframe
-        if self.scale_columns:
-            temp_dataframe = self.state_df[self.scale_columns]
-
-            scaled_data = self.scaler.fit_transform(temp_dataframe)
-
-            temp_dataframe = pd.DataFrame(scaled_data, columns=self.scale_columns)
-
-        # If unscale_columns list not empty, append to temp dataframe
-        if self.unscaled_columns:
-            unscaled_df = self.state_df[self.unscaled_columns].reset_index(drop=True)
-
-            temp_dataframe = pd.concat([temp_dataframe, unscaled_df], axis=1)
-
-        # Check if the episode is over
-        if self.state_counters['step'] == self.episode_length:
-            self.terminated = True
-
-        # Check if total_timesteps has been reached
-        if self.state_counters['step'] * self.state_counters['episode'] == self.total_timesteps:
-            self.timed_out = True
-
-        # For the custom variables, grab the previous step values from the last step
-        custom_variable_dict = {key: self.state[key][1:] for key, value in self.custom_variables.items()}
-
-        # Call each custom variable function to calculate the new values for the latest time
-        custom_variable_dict = self.custom_logic.step(action, self.state_df, custom_variable_dict, self.terminated)
-
-        # store the state dictionary
-        self.state = temp_dataframe.to_dict(orient='list')
-
-        self.state = {key: np.array(value) for key, value in self.state.items()}
-
-        self.state.update(custom_variable_dict)
-
         return None
-
 
     def update_episode_counter(self) -> None:
-        self.state_counters['window'] += 1
-        self.state_counters['episode'] += 1
+        """Increment window and episode counters for historical iteration."""
+        self.state_counters["window"] += 1
+        self.state_counters["episode"] += 1
         return None
 
-    
-    def initialise_live_data(self) -> object:
-        self.logger.info(f'Initialising live data function')
+    def initialise_live_data(self) -> Callable[[], None] | None:
+        """Route live data handling to the correct task function."""
+        self.logger.info(f"Initialising live data function")
 
-        if self.config['task_selection'] == 'task2' or self.config['task_selection'] == 'task3':
+        route: Callable[[], None] | None = None
+
+        if (
+            self.config["task_selection"] == "task2"
+            or self.config["task_selection"] == "task3"
+        ):
             # Flag for completed initialisation
             self.initialised = False
 
             # Route to the correct function based on the task selection
-            if self.config['task_selection'] == 'task2':
+            if self.config["task_selection"] == "task2":
                 route = self.live_step
-            elif self.config['task_selection'] == 'task3':
+            elif self.config["task_selection"] == "task3":
                 self.terminated = False
 
                 app = Trading(self.config, self.pipeline)
                 self.trading = app
 
                 route = self.trading_step
-            
-            self.logger.info(f'Initialised live data function')
+
+            self.logger.info(f"Initialised live data function")
         else:
-            self.logger.error('Live data usage not supported or used for this task')
+            self.logger.error("Live data usage not supported or used for this task")
             route = None
 
         return route
 
-
     def live_data(self, queue: pd.DataFrame) -> None:
-        self.logger.info(f'Live data received by StateBuilder')
+        """Accept incoming live data and trigger state update."""
+        self.logger.info(f"Live data received by StateBuilder")
         self.queue = queue
 
         if self.initialised:
-            self.live_data_function()
+            if self.live_data_function is not None:
+                self.live_data_function()
         else:
             self.initialise_state()
             self.initialised = True
 
         return None
-    
 
     def trading_step(self) -> None:
+        """Rebuild state for live trading and execute trade logic."""
         self.final_dataframe = self.queue
 
-        # Grab the next window of data
-        frame_start = self.file_step
-        frame_end = self.file_step + self.window_end
-        self.state_df = self.final_dataframe.iloc[frame_start:frame_end]
+        self.state_manager.load_dataframe(self.final_dataframe)
+        self.state_manager.file_offset = self.file_offset
+        self.state_manager.file_step = self.file_step
+        self.state_manager.total_timesteps = self.total_timesteps
+        self.state_manager.episode_length = self.episode_length
+        self.state_manager.terminated = self.terminated
+        self.state_manager.timed_out = self.timed_out
 
-        # Create an empty dataframe
-        temp_dataframe = pd.DataFrame()
-        
-        # If scale_columns list not empty, append to a temp dataframe
-        if self.scale_columns:
-            temp_dataframe = self.state_df[self.scale_columns]
-
-            scaled_data = self.scaler.fit_transform(temp_dataframe)
-
-            temp_dataframe = pd.DataFrame(scaled_data, columns=self.scale_columns)
-
-        # If unscale_columns list not empty, append to temp dataframe
-        if self.unscaled_columns:
-            unscaled_df = self.state_df[self.unscaled_columns].reset_index(drop=True)
-
-            temp_dataframe = pd.concat([temp_dataframe, unscaled_df], axis=1)
+        # Rebuild state window for live trading without advancing counters.
+        existing_custom_variables = dict(getattr(self, "custom_variables", {}))
+        self.state = self.state_manager.initialise_state()
+        self.state_df = self.state_manager.state_df
+        if existing_custom_variables:
+            self.custom_variables = existing_custom_variables
+        else:
+            self.custom_variables = self.state_manager.custom_variables
 
         payload = self.trading.payload
 
-        # For the custom variables, grab the previous step values from the last step
-        custom_variable_dict = {key: self.state[key][1:] for key, value in self.custom_variables.items()}
-
-        # Get latest values for the custom variables
-        custom_variable_dict = self.custom_logic.step(payload, self.state_df, custom_variable_dict, self.terminated)
-
-        # store the state dictionary
-        self.state = temp_dataframe.to_dict(orient='list')
-
-        self.state = {key: np.array(value) for key, value in self.state.items()}
+        custom_variable_dict = {
+            key: self.state[key][1:]
+            for key, _ in self.custom_variables.items()
+            if key in self.state
+        }
+        custom_variable_dict = self.custom_logic.step(
+            payload,
+            self.state_df,
+            custom_variable_dict,
+            self.terminated,
+        )
 
         self.state.update(custom_variable_dict)
 
-        self.logger.info(f'state updated: {self.state}')
+        self.logger.info(f"state updated: {self.state}")
 
         self.trading.confirmTrades()
 
@@ -344,7 +339,19 @@ class StateBuilder:
 
         return None
 
-
     def live_step(self) -> None:
-        self.logger.info(f'Live step not yet implemented')
+        """Placeholder for task-2 live data stepping."""
+        self.logger.info(f"Live step not yet implemented")
         return None
+
+    @property
+    def current_step(self) -> int:
+        return self.state_manager.current_step
+
+    @property
+    def current_episode(self) -> int:
+        return self.state_manager.current_episode
+
+    @property
+    def is_initialized(self) -> bool:
+        return self.state_manager.is_initialized
