@@ -9,6 +9,8 @@ from algotrading.src.data_pipeline.types import (
     DataFrequency,
     DataRecord,
     DataType,
+    NewsQuery,
+    NewsRecord,
     SourceMetadata,
 )
 
@@ -19,6 +21,8 @@ __all__ = [
     "DataFrequency",
     "DataRecord",
     "DataType",
+    "NewsRecord",
+    "NewsQuery",
     "SourceMetadata",
     "__version__",
 ]

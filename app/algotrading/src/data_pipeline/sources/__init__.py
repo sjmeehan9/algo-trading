@@ -13,6 +13,8 @@ from algotrading.src.data_pipeline.sources.exceptions import (
     DataValidationError,
 )
 from algotrading.src.data_pipeline.sources.file_source import FileSource
+from algotrading.src.data_pipeline.sources.news_source import NewsDataSource
+from algotrading.src.data_pipeline.types import NewsQuery, NewsRecord
 
 __all__ = [
     "DataSource",
@@ -24,4 +26,7 @@ __all__ = [
     "DataSourceConnectionError",
     "DataValidationError",
     "DataNotFoundError",
+    "NewsDataSource",
+    "NewsRecord",
+    "NewsQuery",
 ]

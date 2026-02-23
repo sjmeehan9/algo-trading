@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Iterator
@@ -161,3 +161,77 @@ class SourceMetadata:
     supported_types: list[DataType]
     supported_frequencies: list[DataFrequency]
     config: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class NewsRecord:
+    """Immutable representation of a news event for sentiment pipelines.
+
+    Args:
+        timestamp: Event publication time.
+        headline: Headline text.
+        body: Optional full body text.
+        source: Provider/source label.
+        symbols: Related tickers.
+        categories: Topic/category tags.
+        sentiment_score: Optional precomputed sentiment score.
+        url: Optional article URL.
+        news_id: Provider-unique event identifier.
+    """
+
+    timestamp: datetime
+    headline: str
+    body: str | None
+    source: str
+    symbols: list[str]
+    categories: list[str]
+    sentiment_score: float | None
+    url: str | None
+    news_id: str
+
+    def __post_init__(self) -> None:
+        """Validate core record constraints."""
+
+        if not self.headline.strip():
+            raise ValueError("headline must be non-empty")
+        if not self.source.strip():
+            raise ValueError("source must be non-empty")
+        if not self.news_id.strip():
+            raise ValueError("news_id must be non-empty")
+        if self.sentiment_score is not None and not -1.0 <= self.sentiment_score <= 1.0:
+            raise ValueError("sentiment_score must be between -1.0 and 1.0")
+
+
+@dataclass(slots=True)
+class NewsQuery:
+    """Query parameters for historical/news API retrieval.
+
+    Args:
+        start_time: Inclusive query start timestamp.
+        end_time: Inclusive query end timestamp.
+        symbols: Optional symbol filters.
+        keywords: Optional keyword filters.
+        categories: Optional category filters.
+        limit: Maximum number of results returned.
+        include_body: Whether full body text should be returned.
+    """
+
+    start_time: datetime
+    end_time: datetime
+    symbols: list[str] = field(default_factory=list)
+    keywords: list[str] = field(default_factory=list)
+    categories: list[str] = field(default_factory=list)
+    limit: int = 100
+    include_body: bool = False
+
+    def __post_init__(self) -> None:
+        """Validate query constraints and normalize list values."""
+
+        if self.start_time > self.end_time:
+            raise ValueError("start_time must be less than or equal to end_time")
+        if self.limit <= 0:
+            raise ValueError("limit must be greater than 0")
+
+        self.symbols = [value.strip() for value in self.symbols if value.strip()]
+        self.keywords = [value.strip() for value in self.keywords if value.strip()]
+        self.categories = [value.strip() for value in self.categories if value.strip()]
