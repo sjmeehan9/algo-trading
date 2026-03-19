@@ -1,0 +1,29 @@
+providers:
+  benzinga:
+    name: Benzinga News API
+    base_url: https://api.benzinga.com/api/v2/news
+    auth_type: api_key
+    auth_header: Authorization
+    rate_limit: 100/minute
+    setup_url: https://www.benzinga.com/apis/
+    required_credentials:
+      - env_var: BENZINGA_API_KEY
+        description: API key used to authorize Benzinga requests
+
+  alphavantage:
+    name: Alpha Vantage News Sentiment
+    base_url: https://www.alphavantage.co/query
+    auth_type: query_param
+    auth_param: apikey
+    rate_limit: 5/minute
+    setup_url: https://www.alphavantage.co/support/#api-key
+    required_credentials:
+      - env_var: ALPHAVANTAGE_API_KEY
+        description: API key used for Alpha Vantage query requests
+
+selection:
+  selected_provider: benzinga
+  fallback_provider: alphavantage
+  notes:
+    - "Both provider credentials are configured via environment variables."
+    - "Provider implementation remains stubbed in Phase 3 and will be integrated in Phase 4."

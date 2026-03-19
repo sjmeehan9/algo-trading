@@ -21,10 +21,13 @@ def test_training_initialization(
     integration_config: dict,
     integration_pipeline_rl: dict,
     rl_sample_data_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verify training clients initialise with expected path and model settings."""
 
     del rl_sample_data_file
+
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
 
     config = _task2_config(integration_config)
     trainer = TrainML(config, integration_pipeline_rl)
@@ -50,6 +53,8 @@ def test_short_training_run(
     """Run a short training flow and verify model artifact is created."""
 
     del rl_sample_data_file
+
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
 
     config = _task2_config(integration_config)
 
@@ -86,6 +91,8 @@ def test_training_with_evaluation(
 
     del trained_model_path
 
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
+
     config = _task2_config(integration_config)
     config["backtest_model"] = config["save_to_file"]
 
@@ -121,6 +128,8 @@ def test_training_different_algorithms(
     """Verify both PPO and DQN training paths dispatch and complete."""
 
     del rl_sample_data_file
+
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
 
     config = _task2_config(integration_config)
     pipeline = dict(integration_pipeline_rl)
