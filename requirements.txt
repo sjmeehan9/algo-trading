@@ -11,3 +11,4 @@ pytest>=7.0  # test runner
 pytest-mock>=3.12.0  # mocking utilities for pytest
 pytest-cov>=4.1.0  # coverage reporting for pytest
 isort>=7.0.0
+vaderSentiment>=3.3.2
