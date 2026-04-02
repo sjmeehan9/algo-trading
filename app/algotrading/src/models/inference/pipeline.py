@@ -10,8 +10,9 @@ from threading import RLock
 from typing import Callable
 from uuid import uuid4
 
-from algotrading.src.data_pipeline import DataRecord, DataType
+from algotrading.src.data_pipeline import DataRecord, DataType, NewsRecord
 from algotrading.src.data_pipeline.routing import DataRouter
+from algotrading.src.data_pipeline.sources import NewsDataSource
 from algotrading.src.models.inference.cache import SignalCache
 from algotrading.src.models.inference.executor import (
     InferenceExecutor,
@@ -79,6 +80,10 @@ class InferencePipeline:
         self._listener_callbacks: list[Callable[[str, ModelSignal], None]] = []
         self._router_handler_ids: list[str] = []
         self._completed_since_prune = 0
+        self._configured_news_sentiment: dict[str, tuple[NewsDataSource, list[str]]] = (
+            {}
+        )
+        self._active_news_subscriptions: dict[str, tuple[NewsDataSource, int]] = {}
 
     def configure(self, config: dict[str, object]) -> None:
         """Update runtime configuration for executor and timeouts."""
@@ -106,6 +111,7 @@ class InferencePipeline:
                 self._router_handler_ids.append(handler_id)
 
             self._running = True
+            self._activate_configured_news_subscriptions()
 
     def stop(self) -> None:
         """Stop processing and cleanly release subscriptions and workers."""
@@ -117,6 +123,8 @@ class InferencePipeline:
             for handler_id in self._router_handler_ids:
                 self._data_router.unregister_callback(handler_id)
             self._router_handler_ids.clear()
+
+            self._stop_news_subscriptions()
 
             if self._executor is not None:
                 self._executor.shutdown(wait=True)
@@ -173,6 +181,143 @@ class InferencePipeline:
 
         with self._state_lock:
             self._listener_callbacks.append(callback)
+
+    def configure_news_sentiment(
+        self,
+        news_source: NewsDataSource,
+        sentiment_model_id: str,
+        symbols: list[str],
+    ) -> None:
+        """Configure direct news provider subscription for one sentiment model.
+
+        This enables end-to-end news -> sentiment inference flow even when news
+        records arrive outside router-managed streams.
+        """
+
+        model_id = sentiment_model_id.strip()
+        if not model_id:
+            raise ValueError("sentiment_model_id must be non-empty")
+
+        normalized_symbols = sorted(
+            {value.strip().upper() for value in symbols if value.strip()}
+        )
+        if not normalized_symbols:
+            raise ValueError("symbols must include at least one non-empty symbol")
+
+        entry = self._model_registry.get(model_id)
+        if entry is None:
+            raise ValueError(f"Sentiment model '{model_id}' is not registered")
+        if DataType.NEWS_TEXT not in entry.config.input_data_types:
+            logger.warning(
+                "Configured model %s for direct news sentiment but it does not "
+                "declare NEWS_TEXT in input_data_types",
+                model_id,
+            )
+
+        with self._state_lock:
+            self._configured_news_sentiment[model_id] = (
+                news_source,
+                normalized_symbols,
+            )
+            running = self._running
+
+        if running:
+            self._activate_news_subscription(
+                model_id=model_id,
+                news_source=news_source,
+                symbols=normalized_symbols,
+            )
+
+    def _activate_configured_news_subscriptions(self) -> None:
+        """Activate all configured direct news subscriptions."""
+
+        configured = list(self._configured_news_sentiment.items())
+        for model_id, (news_source, symbols) in configured:
+            self._activate_news_subscription(
+                model_id=model_id,
+                news_source=news_source,
+                symbols=symbols,
+            )
+
+    def _activate_news_subscription(
+        self,
+        model_id: str,
+        news_source: NewsDataSource,
+        symbols: list[str],
+    ) -> None:
+        """Activate direct news callback subscription for a model id."""
+
+        with self._state_lock:
+            if model_id in self._active_news_subscriptions:
+                return
+
+        if not news_source.is_connected:
+            news_source.connect()
+
+        def _on_news(news: NewsRecord) -> None:
+            self._on_news_received(
+                model_id=model_id,
+                news_source=news_source,
+                news=news,
+            )
+
+        subscription_id = news_source.subscribe_news(symbols=symbols, callback=_on_news)
+        with self._state_lock:
+            self._active_news_subscriptions[model_id] = (news_source, subscription_id)
+
+    def _stop_news_subscriptions(self) -> None:
+        """Stop all active direct news subscriptions."""
+
+        with self._state_lock:
+            subscriptions = list(self._active_news_subscriptions.items())
+            self._active_news_subscriptions.clear()
+
+        for model_id, (news_source, subscription_id) in subscriptions:
+            try:
+                news_source.unsubscribe_news(subscription_id)
+            except Exception:  # pragma: no cover - defensive callback handling
+                logger.exception(
+                    "Failed to stop news subscription for model %s",
+                    model_id,
+                )
+
+    def _on_news_received(
+        self,
+        model_id: str,
+        news_source: NewsDataSource,
+        news: NewsRecord,
+    ) -> None:
+        """Submit one direct news record to a configured sentiment model."""
+
+        with self._state_lock:
+            if not self._running or self._executor is None:
+                return
+            executor = self._executor
+
+        entry = self._model_registry.get(model_id)
+        if entry is None:
+            logger.warning(
+                "Skipping direct news inference for unknown model %s",
+                model_id,
+            )
+            return
+        if entry.trainer is None:
+            logger.warning(
+                "Skipping direct news inference for unloaded model %s",
+                model_id,
+            )
+            return
+
+        record = news_source.news_to_record(news)
+        task = InferenceTask(
+            task_id=str(uuid4()),
+            model_id=model_id,
+            data=record,
+            submitted_at=datetime.now(tz=UTC),
+            timeout_seconds=self._get_timeout(model_id),
+        )
+        future = executor.submit(task, entry)
+        future.add_done_callback(self._on_inference_complete)
 
     def _collect_subscription_data_types(self) -> list[DataType]:
         """Collect data types consumed by registered models and strategies."""

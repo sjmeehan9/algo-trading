@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from copy import deepcopy
 from datetime import datetime
@@ -35,6 +36,22 @@ _IB_CONFIRMATION_PROMPT = (
     "  Type 'yes' to proceed or 'no' to skip: "
 )
 
+_NEWS_CONFIRMATION_PROMPT = (
+    "\n"
+    + "=" * 60
+    + "\n"
+    + "  NEWS PROVIDER INTEGRATION TEST — PRE-FLIGHT CHECK\n"
+    + "=" * 60
+    + "\n"
+    + "  Please confirm the following before continuing:\n"
+    + "\n"
+    + "  1. BENZINGA_API_KEY is set in your environment\n"
+    + "  2. ALPHAVANTAGE_API_KEY is set in your environment (fallback)\n"
+    + "  3. External API calls are acceptable for this test session\n"
+    + "\n"
+    + "  Type 'yes' to proceed or 'no' to skip: "
+)
+
 
 @pytest.fixture(scope="session")
 def confirm_ib_gateway() -> dict[str, Any]:
@@ -56,6 +73,39 @@ def confirm_ib_gateway() -> dict[str, Any]:
         pytest.skip("Developer declined IB confirmation prompt.")
 
     return {"host": "127.0.0.1", "port": 7497, "client_id": 100}
+
+
+@pytest.fixture(scope="session")
+def confirm_news_api() -> dict[str, str]:
+    """Prompt once for real news API integration confirmation.
+
+    Returns:
+        Paths to provider and credential config files under app config.
+
+    Raises:
+        pytest.skip: If user declines or required env vars are missing.
+    """
+
+    try:
+        answer = input(_NEWS_CONFIRMATION_PROMPT).strip().lower()
+    except EOFError:
+        pytest.skip(
+            "Non-interactive environment — cannot confirm news API availability."
+        )
+
+    if answer != "yes":
+        pytest.skip("Developer declined news API confirmation prompt.")
+
+    if not os.getenv("BENZINGA_API_KEY"):
+        pytest.skip("BENZINGA_API_KEY is not set.")
+    if not os.getenv("ALPHAVANTAGE_API_KEY"):
+        pytest.skip("ALPHAVANTAGE_API_KEY is not set.")
+
+    config_dir = Path(__file__).resolve().parents[2] / "app" / "algotrading" / "config"
+    return {
+        "providers_path": str(config_dir / "news_providers.yml"),
+        "credentials_path": str(config_dir / "news_credentials.yml"),
+    }
 
 
 def run_ib_client_in_thread(app: Any) -> threading.Thread:

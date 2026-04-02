@@ -15,6 +15,7 @@ from algotrading.src.data_pipeline import (
 )
 from algotrading.src.data_pipeline.routing import DataRouter, RouteConfig, RouterConfig
 from algotrading.src.data_pipeline.sources.base import DataSource
+from algotrading.src.data_pipeline.sources.mock_news_source import MockNewsSource
 from algotrading.src.models.inference import InferencePipeline
 from algotrading.src.models.registry import (
     CustomStrategyRegistry,
@@ -215,4 +216,66 @@ def test_news_sentiment_inference_pipeline_produces_valid_signal(tmp_path) -> No
     assert metrics.failed_inferences == 0
 
     router.stop()
+    pipeline.stop()
+
+
+def test_news_sentiment_direct_subscription_flow(tmp_path) -> None:
+    """Configured news source subscription should feed sentiment inference."""
+
+    router = DataRouter(RouterConfig(routes=[]))
+
+    model_registry = SupportingModelRegistry()
+    model_id = "news-sentiment-direct"
+    model_registry.register(
+        ModelEntryConfig(
+            model_id=model_id,
+            model_type="ml",
+            signal_type=SignalType.SENTIMENT,
+            trainer_class="algotrading.src.models.supporting.sentiment.news_sentiment.NewsSentimentTrainer",
+            input_data_types=[DataType.NEWS_TEXT],
+            input_frequency=DataFrequency.IRREGULAR,
+        )
+    )
+    model_registry.load_model(model_id)
+    model_registry.set_state(model_id, ModelState.READY)
+
+    strategy_dir = tmp_path / "strategies"
+    strategy_dir.mkdir(parents=True, exist_ok=True)
+    strategy_registry = CustomStrategyRegistry(
+        strategy_dirs=[str(strategy_dir)],
+        auto_scan=True,
+    )
+
+    news_source = MockNewsSource(symbols=["AAPL"], frequency_seconds=1)
+
+    pipeline = InferencePipeline(
+        model_registry=model_registry,
+        strategy_registry=strategy_registry,
+        data_router=router,
+    )
+    pipeline.configure(
+        {
+            "max_workers": 2,
+            "default_timeout_seconds": 2.0,
+            "prune_every_n_results": 100,
+        }
+    )
+    pipeline.configure_news_sentiment(
+        news_source=news_source,
+        sentiment_model_id=model_id,
+        symbols=["AAPL"],
+    )
+
+    pipeline.start()
+
+    assert _wait_until(
+        lambda: pipeline.get_latest_signal(model_id) is not None,
+        timeout_seconds=5.0,
+    )
+
+    signal = pipeline.get_latest_signal(model_id)
+    assert signal is not None
+    assert signal.signal_type == SignalType.SENTIMENT
+    assert signal.symbol == "AAPL"
+
     pipeline.stop()

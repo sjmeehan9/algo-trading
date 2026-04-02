@@ -21,6 +21,15 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Run tests marked 'requires_ib' with interactive TWS confirmation.",
     )
+    parser.addoption(
+        "--news-api-confirm",
+        action="store_true",
+        default=False,
+        help=(
+            "Run tests marked 'requires_news_api' with interactive provider "
+            "confirmation."
+        ),
+    )
 
 
 def pytest_collection_modifyitems(
@@ -28,15 +37,24 @@ def pytest_collection_modifyitems(
 ) -> None:
     """Auto-skip ``requires_ib`` tests unless ``--ib-confirm`` is passed."""
 
-    if config.getoption("--ib-confirm"):
-        return
+    if not config.getoption("--ib-confirm"):
+        skip_ib = pytest.mark.skip(
+            reason="IB tests require --ib-confirm flag and a running TWS/Gateway."
+        )
+        for item in items:
+            if "requires_ib" in item.keywords:
+                item.add_marker(skip_ib)
 
-    skip_ib = pytest.mark.skip(
-        reason="IB tests require --ib-confirm flag and a running TWS/Gateway."
-    )
-    for item in items:
-        if "requires_ib" in item.keywords:
-            item.add_marker(skip_ib)
+    if not config.getoption("--news-api-confirm"):
+        skip_news = pytest.mark.skip(
+            reason=(
+                "News API tests require --news-api-confirm flag and configured "
+                "provider credentials."
+            )
+        )
+        for item in items:
+            if "requires_news_api" in item.keywords:
+                item.add_marker(skip_news)
 
 
 class MockBrokerConnection:

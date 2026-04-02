@@ -129,6 +129,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+app/algotrading/config/news_credentials.yml
 
 # Spyder project settings
 .spyderproject
