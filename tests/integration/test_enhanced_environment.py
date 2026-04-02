@@ -8,9 +8,16 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import pytest
 from algotrading.src.envs.signal_integration import SignalConfig, SignalIntegration
 from algotrading.src.envs.trading_env import TradingEnv
 from algotrading.src.models.signals import ModelSignal, SignalMetadata, SignalType
+from algotrading.src.trainers import (
+    SB3Algorithm,
+    StableBaselines3Trainer,
+    TrainingConfig,
+)
+from gymnasium.wrappers import FlattenObservation
 
 
 @dataclass
@@ -162,3 +169,47 @@ def test_signal_enhanced_environment_runs_multiple_steps() -> None:
         assert isinstance(truncated, bool)
         assert "signals" in step_info
         assert "sentiment" in step_info["signals"]
+
+
+@pytest.mark.slow
+def test_signal_enhanced_environment_supports_short_training_loop() -> None:
+    """Signal-enhanced TradingEnv should support short PPO training and inference."""
+
+    state_builder = _StateBuilder(_pipeline())
+    integration = SignalIntegration(
+        alignment_service=_AlignmentService(),  # type: ignore[arg-type]
+        signal_configs=[
+            SignalConfig(
+                model_id="sentiment_model",
+                signal_key="sentiment",
+                default_value=0.0,
+                include_confidence=True,
+                include_staleness=True,
+            )
+        ],
+    )
+    signal_env = TradingEnv(state_builder, signal_integration=integration)
+    env = FlattenObservation(signal_env)
+
+    trainer = StableBaselines3Trainer(
+        algorithm=SB3Algorithm.PPO,
+        policy="MlpPolicy",
+    )
+    config = TrainingConfig(
+        total_timesteps=96,
+        learning_rate=0.0003,
+        batch_size=32,
+        n_steps=32,
+        custom_params={"verbose": 0},
+    )
+
+    trainer.create_model(env, config)
+    result = trainer.train(config)
+
+    observation, _ = env.reset()
+    action, info = trainer.predict(observation)
+
+    assert result.timesteps_trained == 96
+    assert trainer.is_trained is True
+    assert action in (0, 1, 2)
+    assert "states" in info
