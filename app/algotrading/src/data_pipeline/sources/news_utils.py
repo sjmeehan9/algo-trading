@@ -7,6 +7,7 @@ import os
 import re
 import time
 from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from threading import Lock
 
 _ENV_PATTERN = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
@@ -78,6 +79,11 @@ def parse_benzinga_datetime(value: str) -> datetime:
             return ensure_utc(datetime.strptime(candidate, fmt))
         except ValueError:
             continue
+
+    try:
+        return ensure_utc(parsedate_to_datetime(candidate))
+    except (ValueError, TypeError):
+        pass
 
     raise ValueError(f"Unsupported Benzinga datetime format: {value}")
 
