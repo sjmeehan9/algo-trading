@@ -53,7 +53,13 @@ class NewsDataSource(DataSource, ABC):
         symbols: list[str],
         callback: Callable[[NewsRecord], None],
     ) -> int:
-        """Start real-time news subscription and return subscription identifier."""
+        """Start provider subscription and return subscription identifier.
+
+        Note:
+            Many news providers do not support WebSocket/event streaming. Concrete
+            implementations may use poll-based delivery with provider-specific
+            intervals and latency characteristics.
+        """
 
     @abstractmethod
     def unsubscribe_news(self, subscription_id: int) -> None:

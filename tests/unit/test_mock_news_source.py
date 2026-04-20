@@ -26,6 +26,10 @@ def test_news_generator_returns_valid_news_record() -> None:
     assert record.source
     assert record.headline
     assert record.symbols == ["AAPL"]
+    assert record.categories[0] in NewsGenerator.CATEGORIES
+    assert record.source in NewsGenerator.SOURCES
+    assert record.url is not None
+    assert record.url.startswith("https://mocknews.local/article/")
     assert -1.0 <= (record.sentiment_score or 0.0) <= 1.0
 
 

@@ -1,6 +1,10 @@
 """Data source interfaces and implementations for the data pipeline."""
 
+from algotrading.src.data_pipeline.sources.alphavantage_news import (
+    AlphaVantageNewsSource,
+)
 from algotrading.src.data_pipeline.sources.base import DataSource
+from algotrading.src.data_pipeline.sources.benzinga_news import BenzingaNewsSource
 from algotrading.src.data_pipeline.sources.broker_source import (
     BrokerDataSource,
     bar_to_record,
@@ -17,6 +21,7 @@ from algotrading.src.data_pipeline.sources.mock_news_source import (
     MockNewsSource,
     NewsGenerator,
 )
+from algotrading.src.data_pipeline.sources.news_factory import NewsSourceFactory
 from algotrading.src.data_pipeline.sources.news_source import NewsDataSource
 from algotrading.src.data_pipeline.types import NewsQuery, NewsRecord
 
@@ -31,6 +36,9 @@ __all__ = [
     "DataValidationError",
     "DataNotFoundError",
     "NewsDataSource",
+    "BenzingaNewsSource",
+    "AlphaVantageNewsSource",
+    "NewsSourceFactory",
     "MockNewsSource",
     "NewsGenerator",
     "NewsRecord",

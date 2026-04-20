@@ -174,7 +174,7 @@ class NewsRecord:
         source: Provider/source label.
         symbols: Related tickers.
         categories: Topic/category tags.
-        sentiment_score: Optional precomputed sentiment score.
+        sentiment_score: Optional provider-supplied sentiment score.
         url: Optional article URL.
         news_id: Provider-unique event identifier.
     """
@@ -210,7 +210,8 @@ class NewsQuery:
         start_time: Inclusive query start timestamp.
         end_time: Inclusive query end timestamp.
         symbols: Optional symbol filters.
-        keywords: Optional keyword filters.
+        keywords: Optional keyword filters. For providers without server-side
+            text search support, filtering is applied client-side after fetch.
         categories: Optional category filters.
         limit: Maximum number of results returned.
         include_body: Whether full body text should be returned.
