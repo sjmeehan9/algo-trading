@@ -9,7 +9,12 @@ from uuid import uuid4
 
 from algotrading.api.config import APIConfig, as_public_config
 from algotrading.api.middleware import AuthMiddleware, RequestLoggingMiddleware
-from algotrading.api.routers import generations_router, models_router, strategies_router
+from algotrading.api.routers import (
+    generations_router,
+    models_router,
+    strategies_router,
+    training_router,
+)
 from algotrading.api.schemas import APIError
 from algotrading.api.websocket import WebSocketManager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, status
@@ -81,6 +86,7 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
     app.include_router(models_router, prefix="/api/v1")
     app.include_router(strategies_router, prefix="/api/v1")
     app.include_router(generations_router, prefix="/api/v1")
+    app.include_router(training_router, prefix="/api/v1")
 
     @app.exception_handler(StarletteHTTPException)
     async def handle_http_exception(_, exc: StarletteHTTPException) -> JSONResponse:
@@ -125,6 +131,15 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
     @app.on_event("startup")
     async def on_startup() -> None:
         logger.info("api_startup %s", as_public_config(resolved_config))
+        training_service = getattr(app.state, "training_service", None)
+        if training_service is not None:
+            await training_service.start()
+
+    @app.on_event("shutdown")
+    async def on_shutdown() -> None:
+        training_service = getattr(app.state, "training_service", None)
+        if training_service is not None:
+            await training_service.stop()
 
     @app.get("/health", tags=["system"])
     async def health_check() -> dict[str, str]:

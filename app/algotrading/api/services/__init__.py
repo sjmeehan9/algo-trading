@@ -11,6 +11,14 @@ from algotrading.api.services.model_service import (
     create_default_model_service,
     get_model_service,
 )
+from algotrading.api.services.training_service import (
+    TrainingJobNotFoundError,
+    TrainingJobStateError,
+    TrainingService,
+    TrainingServiceError,
+    create_default_training_service,
+    get_training_service,
+)
 
 __all__ = [
     "ModelService",
@@ -22,4 +30,10 @@ __all__ = [
     "GenerationNotFoundError",
     "create_default_model_service",
     "get_model_service",
+    "TrainingService",
+    "TrainingServiceError",
+    "TrainingJobNotFoundError",
+    "TrainingJobStateError",
+    "create_default_training_service",
+    "get_training_service",
 ]

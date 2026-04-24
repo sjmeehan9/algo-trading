@@ -17,6 +17,12 @@ from algotrading.api.schemas.models import (
     SupportingModelConfig,
 )
 from algotrading.api.schemas.strategies import StrategyDetail, StrategyInfo
+from algotrading.api.schemas.training import (
+    TrainingJob,
+    TrainingJobCreate,
+    TrainingJobStatus,
+    TrainingProgress,
+)
 
 __all__ = [
     "APIError",
@@ -35,4 +41,8 @@ __all__ = [
     "GenerationDetail",
     "GenerationComparison",
     "GenerationComparisonRequest",
+    "TrainingJob",
+    "TrainingJobCreate",
+    "TrainingJobStatus",
+    "TrainingProgress",
 ]

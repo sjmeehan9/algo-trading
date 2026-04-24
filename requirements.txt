@@ -16,6 +16,7 @@ tensorflow>=2.16.1
 pytest>=7.0  # test runner
 pytest-mock>=3.12.0  # mocking utilities for pytest
 pytest-cov>=4.1.0  # coverage reporting for pytest
+pytest-asyncio>=1.0  # async test support for FastAPI training endpoints
 httpx>=0.28.0  # required by FastAPI TestClient
 isort>=7.0.0
 requests>=2.31.0
