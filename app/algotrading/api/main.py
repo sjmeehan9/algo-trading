@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from algotrading.api.config import APIConfig, as_public_config
 from algotrading.api.middleware import AuthMiddleware, RequestLoggingMiddleware
+from algotrading.api.routers import generations_router, models_router, strategies_router
 from algotrading.api.schemas import APIError
 from algotrading.api.websocket import WebSocketManager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, status
@@ -77,12 +78,28 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(models_router, prefix="/api/v1")
+    app.include_router(strategies_router, prefix="/api/v1")
+    app.include_router(generations_router, prefix="/api/v1")
+
     @app.exception_handler(StarletteHTTPException)
     async def handle_http_exception(_, exc: StarletteHTTPException) -> JSONResponse:
+        details: dict[str, Any] | None = None
+        error = str(exc.detail)
+        error_code = "HTTP_ERROR"
+
+        if isinstance(exc.detail, dict):
+            error = str(exc.detail.get("error", "HTTP error"))
+            error_code = str(exc.detail.get("error_code", "HTTP_ERROR"))
+            details_value = exc.detail.get("details")
+            if isinstance(details_value, dict):
+                details = details_value
+
         return _error_response(
             status_code=exc.status_code,
-            error=str(exc.detail),
-            error_code="HTTP_ERROR",
+            error=error,
+            error_code=error_code,
+            details=details,
         )
 
     @app.exception_handler(RequestValidationError)
