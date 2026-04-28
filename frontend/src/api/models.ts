@@ -47,6 +47,20 @@ export interface ListModelsParams {
   pageSize?: number;
 }
 
+export interface StrategyInfo {
+  strategy_id: string;
+  name: string;
+  signal_type: SignalType;
+  description: string;
+  version: string;
+  state: string;
+}
+
+export interface StrategyDetail extends StrategyInfo {
+  filepath: string;
+  class_name: string;
+}
+
 const toModelListParams = (params: ListModelsParams = {}): Record<string, unknown> => ({
   ...(params.modelType ? { model_type: params.modelType } : {}),
   ...(params.page ? { page: params.page } : {}),
@@ -56,7 +70,10 @@ const toModelListParams = (params: ListModelsParams = {}): Record<string, unknow
 /** API helpers for model-management endpoints. */
 export const modelsApi = {
   list(params?: ListModelsParams): Promise<PaginatedResponse<ModelConfigResponse>> {
-    return apiClient.get<PaginatedResponse<ModelConfigResponse>>('/models', toModelListParams(params));
+    return apiClient.get<PaginatedResponse<ModelConfigResponse>>(
+      '/models',
+      toModelListParams(params),
+    );
   },
 
   create(config: ModelConfigCreate): Promise<ModelConfigResponse> {
@@ -73,5 +90,19 @@ export const modelsApi = {
 
   remove(modelId: string): Promise<void> {
     return apiClient.delete<void>(`/models/${encodeURIComponent(modelId)}`);
+  },
+};
+
+/** API helpers for custom strategy catalog endpoints. */
+export const strategiesApi = {
+  list(signalType?: SignalType): Promise<StrategyInfo[]> {
+    return apiClient.get<StrategyInfo[]>(
+      '/strategies',
+      signalType ? { signal_type: signalType } : undefined,
+    );
+  },
+
+  get(strategyId: string): Promise<StrategyDetail> {
+    return apiClient.get<StrategyDetail>(`/strategies/${encodeURIComponent(strategyId)}`);
   },
 };
