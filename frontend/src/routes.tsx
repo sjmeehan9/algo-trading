@@ -19,6 +19,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Dashboard /> },
       { path: 'models', element: <ModelsPage /> },
       { path: 'models/new', element: <ModelConfigPage /> },
+      { path: 'models/supporting/new', element: <ModelConfigPage /> },
       { path: 'models/:modelId', element: <ModelConfigPage /> },
       { path: 'models/:modelId/supporting/new', element: <ModelConfigPage /> },
       { path: 'training', element: <TrainingPage /> },

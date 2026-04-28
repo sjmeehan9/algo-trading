@@ -1,4 +1,4 @@
-import { BrainCircuit, Plus } from 'lucide-react';
+import { BrainCircuit, Plus, Waypoints } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 /** Route page for model registry browsing and creation entry points. */
@@ -8,12 +8,20 @@ export default function Models(): JSX.Element {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold text-ink">Models</h2>
-          <p className="mt-1 text-sm text-stone-600">Core RL and supporting model configurations.</p>
+          <p className="mt-1 text-sm text-stone-600">
+            Core RL and supporting model configurations.
+          </p>
         </div>
-        <Link className="primary-button" to="/models/new">
-          <Plus size={16} aria-hidden="true" />
-          New model
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link className="secondary-button" to="/models/supporting/new">
+            <Waypoints size={16} aria-hidden="true" />
+            New supporting model
+          </Link>
+          <Link className="primary-button" to="/models/new">
+            <Plus size={16} aria-hidden="true" />
+            New core model
+          </Link>
+        </div>
       </div>
 
       <section className="surface-panel overflow-hidden">
@@ -34,7 +42,11 @@ export default function Models(): JSX.Element {
             <tbody>
               <tr>
                 <td colSpan={5} className="px-5 py-12 text-center text-stone-500">
-                  <BrainCircuit className="mx-auto mb-3 text-stone-400" size={28} aria-hidden="true" />
+                  <BrainCircuit
+                    className="mx-auto mb-3 text-stone-400"
+                    size={28}
+                    aria-hidden="true"
+                  />
                   No model configurations found.
                 </td>
               </tr>

@@ -83,6 +83,10 @@ export interface UseModelFormResult {
   save: (formData: CoreRLModelFormData) => Promise<ModelConfigResponse>;
 }
 
+export interface UseModelFormOptions {
+  enabled?: boolean;
+}
+
 const toDateInputValue = (dateValue: Date): string => dateValue.toISOString().slice(0, 10);
 
 const today = (): Date => new Date();
@@ -271,14 +275,18 @@ const errorToMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'Unable to save model configuration.';
 
 /** Manage loading and saving state for core RL model configuration pages. */
-export const useModelForm = (modelId?: string): UseModelFormResult => {
+export const useModelForm = (
+  modelId?: string,
+  options: UseModelFormOptions = {},
+): UseModelFormResult => {
   const queryClient = useQueryClient();
+  const enabled = options.enabled ?? true;
   const isEditMode = Boolean(modelId);
 
   const modelQuery = useQuery({
     queryKey: ['models', modelId],
     queryFn: () => modelsApi.get(modelId ?? ''),
-    enabled: isEditMode,
+    enabled: enabled && isEditMode,
   });
 
   const createMutation = useMutation({

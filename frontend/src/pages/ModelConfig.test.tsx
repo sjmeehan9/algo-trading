@@ -126,6 +126,7 @@ const renderModelConfig = (route: string): void => {
       <MemoryRouter initialEntries={[route]}>
         <Routes>
           <Route path="/models/new" element={<ModelConfig />} />
+          <Route path="/models/supporting/new" element={<ModelConfig />} />
           <Route path="/models/:modelId" element={<ModelConfig />} />
           <Route path="/models" element={<h2>Models</h2>} />
         </Routes>
@@ -203,6 +204,62 @@ describe('ModelConfig', () => {
       algorithm: 'dqn',
       supporting_model_ids: ['supporting-ml-1'],
       strategy_ids: ['strategy-1'],
+    });
+  });
+
+  it('creates a supporting ML model without supporting model inputs', async () => {
+    const user = userEvent.setup();
+    renderModelConfig('/models/supporting/new');
+
+    await user.type(screen.getByLabelText(/Model Name/), 'News Sentiment Signal');
+    await user.click(screen.getByRole('checkbox', { name: /News Text/ }));
+    await user.click(screen.getByRole('button', { name: /Create Supporting Model/ }));
+
+    await waitFor(() => expect(modelsApi.create).toHaveBeenCalledTimes(1));
+    expect(modelsApi.list).not.toHaveBeenCalled();
+    expect(strategiesApi.list).not.toHaveBeenCalled();
+
+    const payload = vi.mocked(modelsApi.create).mock.calls[0]?.[0];
+    if (!payload) {
+      throw new Error('Expected create payload.');
+    }
+
+    expect(payload).toMatchObject({
+      name: 'News Sentiment Signal',
+      model_type: 'supporting_ml',
+      signal_type: 'sentiment',
+      trainer_type: 'sklearn',
+      algorithm: 'random_forest',
+      input_data_types: ['news_text'],
+      input_frequency: '1m',
+      supporting_model_ids: [],
+      strategy_ids: [],
+    });
+  });
+
+  it('creates a supporting RL model', async () => {
+    const user = userEvent.setup();
+    renderModelConfig('/models/supporting/new');
+
+    await user.click(screen.getByRole('button', { name: /Reinforcement Learning/ }));
+    await user.type(screen.getByLabelText(/Model Name/), 'RL Trend Signal');
+    await user.click(screen.getByRole('checkbox', { name: /Market Data/ }));
+    await user.click(screen.getByRole('radio', { name: /Trend/ }));
+    await user.click(screen.getByRole('button', { name: /Create Supporting Model/ }));
+
+    await waitFor(() => expect(modelsApi.create).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(modelsApi.create).mock.calls[0]?.[0];
+    if (!payload) {
+      throw new Error('Expected create payload.');
+    }
+
+    expect(payload).toMatchObject({
+      name: 'RL Trend Signal',
+      model_type: 'supporting_rl',
+      signal_type: 'trend',
+      trainer_type: 'stable_baselines3',
+      algorithm: 'ppo',
+      input_data_types: ['market_bar'],
     });
   });
 });
