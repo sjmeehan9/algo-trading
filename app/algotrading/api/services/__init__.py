@@ -1,5 +1,19 @@
 """Service-layer exports for API endpoint handlers."""
 
+from algotrading.api.services.backtest_service import (
+    BacktestExecutionError,
+    BacktestExecutionResult,
+    BacktestExecutor,
+    BacktestJobContext,
+    BacktestNotFoundError,
+    BacktestService,
+    BacktestServiceError,
+    BacktestValidationError,
+    DefaultBacktestExecutor,
+    create_default_backtest_service,
+    get_backtest_service,
+)
+from algotrading.api.services.metrics_calculator import MetricsCalculator
 from algotrading.api.services.model_service import (
     GenerationNotFoundError,
     InvalidModelStateError,
@@ -21,6 +35,18 @@ from algotrading.api.services.training_service import (
 )
 
 __all__ = [
+    "BacktestExecutor",
+    "BacktestExecutionResult",
+    "BacktestJobContext",
+    "BacktestService",
+    "BacktestServiceError",
+    "BacktestValidationError",
+    "BacktestNotFoundError",
+    "BacktestExecutionError",
+    "DefaultBacktestExecutor",
+    "MetricsCalculator",
+    "create_default_backtest_service",
+    "get_backtest_service",
     "ModelService",
     "ModelServiceError",
     "ModelValidationError",

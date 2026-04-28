@@ -1,5 +1,16 @@
 """Schema definitions used by API request and response handlers."""
 
+from algotrading.api.schemas.backtesting import (
+    BacktestComparison,
+    BacktestComparisonRequest,
+    BacktestRequest,
+    BacktestResult,
+    BacktestStatus,
+    EquityPoint,
+    PerformanceMetrics,
+    TradeAction,
+    TradeRecord,
+)
 from algotrading.api.schemas.common import APIError, APIResponse, PaginatedResponse
 from algotrading.api.schemas.generations import (
     GenerationComparison,
@@ -28,6 +39,15 @@ __all__ = [
     "APIError",
     "APIResponse",
     "PaginatedResponse",
+    "BacktestStatus",
+    "TradeAction",
+    "BacktestRequest",
+    "TradeRecord",
+    "PerformanceMetrics",
+    "EquityPoint",
+    "BacktestResult",
+    "BacktestComparison",
+    "BacktestComparisonRequest",
     "ModelType",
     "ModelConfigBase",
     "CoreRLModelConfig",
