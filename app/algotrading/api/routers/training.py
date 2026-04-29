@@ -7,6 +7,7 @@ from algotrading.api.schemas.training import (
     TrainingJob,
     TrainingJobCreate,
     TrainingJobStatus,
+    TrainingQueueReorderRequest,
 )
 from algotrading.api.services.training_service import (
     TrainingJobNotFoundError,
@@ -102,6 +103,23 @@ async def cancel_training_job(
         raise _http_error(409, str(exc), "TRAINING_JOB_STATE_ERROR") from exc
 
     return APIResponse(data=job, message="Training job cancellation requested")
+
+
+@router.post("/jobs/reorder", response_model=APIResponse[list[TrainingJob]])
+async def reorder_training_queue(
+    request: TrainingQueueReorderRequest,
+    service: TrainingService = Depends(get_training_service),
+) -> APIResponse[list[TrainingJob]]:
+    """Replace the queued training job order."""
+
+    try:
+        jobs = await service.reorder_queue(request.job_ids)
+    except TrainingJobNotFoundError as exc:
+        raise _http_error(404, str(exc), "TRAINING_JOB_NOT_FOUND") from exc
+    except TrainingJobStateError as exc:
+        raise _http_error(409, str(exc), "TRAINING_JOB_STATE_ERROR") from exc
+
+    return APIResponse(data=jobs, message="Training queue reordered")
 
 
 __all__ = ["router"]

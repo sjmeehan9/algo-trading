@@ -1,6 +1,6 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
-export type TrainingJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+import type { TrainingJob, TrainingJobStatus } from '../api/training';
 
 export interface TrainingJobSummary {
   jobId: string;
@@ -17,6 +17,13 @@ interface TrainingState {
 const initialState: TrainingState = {
   jobs: [],
 };
+
+const toTrainingJobSummary = (job: TrainingJob): TrainingJobSummary => ({
+  jobId: job.job_id,
+  modelId: job.model_id,
+  status: job.status,
+  progressPercent: job.progress_percent,
+});
 
 /** Redux slice that tracks active training job selection and summary state. */
 export const trainingSlice = createSlice({
@@ -36,6 +43,17 @@ export const trainingSlice = createSlice({
 
       state.jobs.unshift(action.payload);
     },
+    upsertApiJob(state, action: PayloadAction<TrainingJob>) {
+      const summary = toTrainingJobSummary(action.payload);
+      const existingIndex = state.jobs.findIndex((job) => job.jobId === summary.jobId);
+
+      if (existingIndex >= 0) {
+        state.jobs[existingIndex] = summary;
+        return;
+      }
+
+      state.jobs.unshift(summary);
+    },
     clearTrainingState(state) {
       state.activeJobId = undefined;
       state.jobs = [];
@@ -43,6 +61,6 @@ export const trainingSlice = createSlice({
   },
 });
 
-export const { clearTrainingState, setActiveJob, upsertJob } = trainingSlice.actions;
+export const { clearTrainingState, setActiveJob, upsertApiJob, upsertJob } = trainingSlice.actions;
 
 export default trainingSlice.reducer;

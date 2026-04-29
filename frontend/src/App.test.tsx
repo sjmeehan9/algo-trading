@@ -1,12 +1,67 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { modelsApi } from './api/models';
+import { trainingApi } from './api/training';
 import App from './App';
+
+const createEmptyPaginated = () => ({
+  items: [],
+  total: 0,
+  page: 1,
+  page_size: 100,
+  pages: 0,
+});
+
+vi.mock('./api/models', () => ({
+  modelsApi: {
+    list: vi.fn().mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 100,
+      pages: 0,
+    }),
+    create: vi.fn(),
+    get: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+  },
+  strategiesApi: {
+    list: vi.fn().mockResolvedValue([]),
+    get: vi.fn(),
+  },
+}));
+
+vi.mock('./api/training', () => ({
+  trainingApi: {
+    listJobs: vi.fn().mockResolvedValue([]),
+    createJob: vi.fn(),
+    cancelJob: vi.fn(),
+    reorderQueue: vi.fn(),
+    listGenerations: vi.fn().mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 100,
+      pages: 0,
+    }),
+  },
+}));
+
+vi.mock('./api/websocket', () => ({
+  wsClient: {
+    subscribe: vi.fn(() => vi.fn()),
+  },
+}));
 
 describe('App', () => {
   beforeEach(() => {
     window.history.pushState({}, '', '/');
+    vi.mocked(modelsApi.list).mockResolvedValue(createEmptyPaginated());
+    vi.mocked(trainingApi.listJobs).mockResolvedValue([]);
+    vi.mocked(trainingApi.listGenerations).mockResolvedValue(createEmptyPaginated());
   });
 
   it('renders the dashboard route without crashing', () => {
@@ -24,9 +79,11 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { level: 2, name: 'Models' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('link', { name: /training/i }));
-    expect(await screen.findByRole('heading', { level: 2, name: 'Training' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: /Training/ })).toBeInTheDocument();
 
     await user.click(screen.getByRole('link', { name: /backtesting/i }));
-    expect(await screen.findByRole('heading', { level: 2, name: 'Backtesting' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Backtesting' }),
+    ).toBeInTheDocument();
   });
 });

@@ -187,12 +187,51 @@ class TrainingService:
 
         with self._lock:
             jobs = list(self._jobs.values())
+            queued_order = {job_id: index for index, job_id in enumerate(self._queue)}
         if status is not None:
             jobs = [job for job in jobs if job.status == status]
         if model_id is not None:
             jobs = [job for job in jobs if job.model_id == model_id]
-        jobs.sort(key=lambda item: item.created_at, reverse=True)
+
+        if status == TrainingJobStatus.QUEUED:
+            jobs.sort(key=lambda item: queued_order.get(item.job_id, len(queued_order)))
+        else:
+            jobs.sort(key=lambda item: item.created_at, reverse=True)
         return jobs
+
+    async def reorder_queue(self, job_ids: list[str]) -> list[TrainingJob]:
+        """Replace the queued-job order and return the reordered queued jobs."""
+
+        with self._lock:
+            current_queue = list(self._queue)
+            current_queue_set = set(current_queue)
+            requested_queue_set = set(job_ids)
+
+            missing_ids = requested_queue_set.difference(self._jobs)
+            if missing_ids:
+                missing = sorted(missing_ids)[0]
+                raise TrainingJobNotFoundError(f"Training job '{missing}' not found")
+
+            if requested_queue_set != current_queue_set:
+                raise TrainingJobStateError(
+                    "Queued job order must include exactly the currently queued jobs"
+                )
+
+            for job_id in job_ids:
+                job = self._jobs[job_id]
+                if job.status != TrainingJobStatus.QUEUED:
+                    raise TrainingJobStateError(
+                        f"Cannot reorder job '{job_id}' in state '{job.status.value}'"
+                    )
+
+            self._queue = deque(job_ids)
+            self._persist_jobs_locked()
+            reordered_jobs = [self._jobs[job_id] for job_id in job_ids]
+
+        self._signal_queue()
+        for job in reordered_jobs:
+            await self._broadcast_job(job)
+        return reordered_jobs
 
     async def cancel_job(self, job_id: str) -> TrainingJob:
         """Cancel a queued or running job."""

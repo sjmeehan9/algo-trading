@@ -263,6 +263,36 @@ async def test_job_queue_is_fifo(
 
 
 @pytest.mark.asyncio
+async def test_reorder_queue_changes_next_job(
+    tmp_path: Path, model_service: ModelService, model_id: str
+) -> None:
+    """Queued jobs can be reordered before execution starts."""
+
+    executor = _FakeExecutor(progress_count=1)
+    worker = TrainingWorker(executor=executor, run_in_executor=_inline_executor)
+    service = TrainingService(
+        ws_manager=WebSocketManager(),
+        model_service=model_service,
+        generation_tracker=model_service.generation_tracker,
+        worker=worker,
+        jobs_path=tmp_path / "jobs.json",
+    )
+
+    first_job = await service.create_job(
+        TrainingJobCreate(model_id=model_id, total_timesteps=10)
+    )
+    second_job = await service.create_job(
+        TrainingJobCreate(model_id=model_id, total_timesteps=10)
+    )
+
+    reordered = await service.reorder_queue([second_job.job_id, first_job.job_id])
+    next_job_id = await service.wait_for_next_job(asyncio.Event())
+
+    assert [job.job_id for job in reordered] == [second_job.job_id, first_job.job_id]
+    assert next_job_id == second_job.job_id
+
+
+@pytest.mark.asyncio
 async def test_job_failure_marks_status_failed(
     tmp_path: Path, model_service: ModelService, model_id: str
 ) -> None:

@@ -329,6 +329,86 @@ def test_cancel_unknown_job_returns_404(
     assert response.json()["error_code"] == "TRAINING_JOB_NOT_FOUND"
 
 
+def test_reorder_queued_jobs_returns_new_order(tmp_path: Path) -> None:
+    """Queued jobs can be reordered through the training API."""
+
+    config = APIConfig(
+        api_key="training-secret-key",
+        debug=True,
+        cors_origins=["http://localhost:3000"],
+    )
+    app = create_app(config)
+
+    model_service = _build_model_service(tmp_path)
+    app.state.model_service = model_service
+
+    worker = TrainingWorker(executor=_BlockingExecutor())
+    training_service = TrainingService(
+        ws_manager=app.state.ws_manager,
+        model_service=model_service,
+        generation_tracker=model_service.generation_tracker,
+        worker=worker,
+        jobs_path=tmp_path / "training_jobs.json",
+    )
+    app.state.training_service = training_service
+
+    model_id = _create_core_model(model_service)
+
+    with TestClient(app) as client:
+        busy_response = client.post(
+            "/api/v1/training/jobs",
+            headers=_auth_headers(),
+            json={"model_id": model_id, "total_timesteps": 50},
+        )
+        assert busy_response.status_code == 201
+        busy_job_id = busy_response.json()["data"]["job_id"]
+        _wait_for_status(client, busy_job_id, TrainingJobStatus.RUNNING.value)
+
+        first_response = client.post(
+            "/api/v1/training/jobs",
+            headers=_auth_headers(),
+            json={"model_id": model_id, "total_timesteps": 50},
+        )
+        second_response = client.post(
+            "/api/v1/training/jobs",
+            headers=_auth_headers(),
+            json={"model_id": model_id, "total_timesteps": 75},
+        )
+        assert first_response.status_code == 201
+        assert second_response.status_code == 201
+        first_job_id = first_response.json()["data"]["job_id"]
+        second_job_id = second_response.json()["data"]["job_id"]
+
+        reorder_response = client.post(
+            "/api/v1/training/jobs/reorder",
+            headers=_auth_headers(),
+            json={"job_ids": [second_job_id, first_job_id]},
+        )
+
+        assert reorder_response.status_code == 200
+        assert [job["job_id"] for job in reorder_response.json()["data"]] == [
+            second_job_id,
+            first_job_id,
+        ]
+
+        queued_response = client.get(
+            "/api/v1/training/jobs",
+            headers=_auth_headers(),
+            params={"status": TrainingJobStatus.QUEUED.value},
+        )
+        assert queued_response.status_code == 200
+        assert [job["job_id"] for job in queued_response.json()["data"]] == [
+            second_job_id,
+            first_job_id,
+        ]
+
+        cancel_response = client.post(
+            f"/api/v1/training/jobs/{busy_job_id}/cancel",
+            headers=_auth_headers(),
+        )
+        assert cancel_response.status_code == 200
+
+
 def test_websocket_receives_training_progress(
     api_client: tuple[TestClient, ModelService, _DeterministicExecutor],
 ) -> None:

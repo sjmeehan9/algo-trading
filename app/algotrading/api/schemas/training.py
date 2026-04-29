@@ -52,6 +52,24 @@ class TrainingJobCreate(BaseModel):
         return self
 
 
+class TrainingQueueReorderRequest(BaseModel):
+    """Payload for replacing the queued-job execution order."""
+
+    job_ids: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _validate_unique_job_ids(self) -> "TrainingQueueReorderRequest":
+        """Validate that each queued job ID appears once."""
+
+        normalized_ids = [job_id.strip() for job_id in self.job_ids]
+        if any(not job_id for job_id in normalized_ids):
+            raise ValueError("job_ids cannot contain blank values")
+        if len(set(normalized_ids)) != len(normalized_ids):
+            raise ValueError("job_ids must be unique")
+        self.job_ids = normalized_ids
+        return self
+
+
 class TrainingJob(BaseModel):
     """API representation of a training job and its current state."""
 
@@ -89,6 +107,7 @@ class TrainingProgress(BaseModel):
 __all__ = [
     "TrainingJobStatus",
     "TrainingJobCreate",
+    "TrainingQueueReorderRequest",
     "TrainingJob",
     "TrainingProgress",
     "is_terminal_status",

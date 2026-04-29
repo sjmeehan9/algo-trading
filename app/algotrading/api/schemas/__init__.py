@@ -33,6 +33,7 @@ from algotrading.api.schemas.training import (
     TrainingJobCreate,
     TrainingJobStatus,
     TrainingProgress,
+    TrainingQueueReorderRequest,
 )
 
 __all__ = [
@@ -63,6 +64,7 @@ __all__ = [
     "GenerationComparisonRequest",
     "TrainingJob",
     "TrainingJobCreate",
+    "TrainingQueueReorderRequest",
     "TrainingJobStatus",
     "TrainingProgress",
 ]
