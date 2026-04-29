@@ -21,3 +21,4 @@ httpx>=0.28.0  # required by FastAPI TestClient
 isort>=7.0.0
 requests>=2.31.0
 vaderSentiment>=3.3.2
+openai>=1.30.0  # LLM hyperparameter optimizer integration

@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import { modelsApi, type ModelConfigResponse } from '../api/models';
 import { trainingApi, type GenerationSummary, type TrainingJob } from '../api/training';
 import ActiveJobCard from '../components/training/ActiveJobCard';
+import HyperparameterSuggestions from '../components/optimizer/HyperparameterSuggestions';
 import GenerationComparisonChart from '../components/training/GenerationComparisonChart';
 import GenerationHistory from '../components/training/GenerationHistory';
 import JobQueue from '../components/training/JobQueue';
@@ -392,6 +393,7 @@ export default function Training(): JSX.Element {
             </div>
           )}
         </section>
+        <HyperparameterSuggestions modelId={selectedModelId || null} />
       </section>
     </div>
   );

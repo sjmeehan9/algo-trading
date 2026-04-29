@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PaginatedResponse } from '../api/client';
 import { modelsApi, type ModelConfigResponse } from '../api/models';
+import { optimizerApi } from '../api/optimizer';
 import { trainingApi, type GenerationSummary, type TrainingJob } from '../api/training';
 import { wsClient } from '../api/websocket';
 import Training from './Training';
@@ -23,6 +24,14 @@ vi.mock('../api/training', () => ({
     cancelJob: vi.fn(),
     reorderQueue: vi.fn(),
     listGenerations: vi.fn(),
+  },
+}));
+
+vi.mock('../api/optimizer', () => ({
+  optimizerApi: {
+    analyze: vi.fn(),
+    getLatest: vi.fn(),
+    apply: vi.fn(),
   },
 }));
 
@@ -173,6 +182,8 @@ describe('Training', () => {
       completed_at: '2026-04-29T09:02:00Z',
     });
     vi.mocked(trainingApi.reorderQueue).mockResolvedValue([secondQueuedJob, firstQueuedJob]);
+    vi.mocked(optimizerApi.getLatest).mockResolvedValue(null);
+    vi.mocked(optimizerApi.analyze).mockRejectedValue(new Error('not used in training tests'));
     vi.mocked(wsClient.subscribe).mockImplementation((topic, handler) => {
       websocketHandlers.set(topic, handler as (data: unknown) => void);
       return vi.fn();

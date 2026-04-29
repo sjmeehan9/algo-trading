@@ -37,7 +37,8 @@ setup(
         'PyYAML>=6.0.1',
         'scikit-learn>=1.3.2',
         'stable_baselines3>=2.3.2',
-        'tensorflow>=2.16.1'
+        'tensorflow>=2.16.1',
+        'openai>=1.30.0',
     ],
     extras_require={
         'dev': [

@@ -13,6 +13,14 @@ from algotrading.api.services.backtest_service import (
     create_default_backtest_service,
     get_backtest_service,
 )
+from algotrading.api.services.llm_optimizer import (
+    LLMOptimizer,
+    OptimizerServiceError,
+    OptimizerSuggestionNotFoundError,
+    OptimizerValidationError,
+    create_default_optimizer_service,
+    get_optimizer_service,
+)
 from algotrading.api.services.metrics_calculator import MetricsCalculator
 from algotrading.api.services.model_service import (
     GenerationNotFoundError,
@@ -24,6 +32,12 @@ from algotrading.api.services.model_service import (
     StrategyNotFoundError,
     create_default_model_service,
     get_model_service,
+)
+from algotrading.api.services.openai_client import (
+    ChatCompletionClient,
+    OpenAIClient,
+    OpenAIClientError,
+    OptimizerUnavailableError,
 )
 from algotrading.api.services.training_service import (
     TrainingJobNotFoundError,
@@ -56,6 +70,16 @@ __all__ = [
     "GenerationNotFoundError",
     "create_default_model_service",
     "get_model_service",
+    "ChatCompletionClient",
+    "OpenAIClient",
+    "OpenAIClientError",
+    "OptimizerUnavailableError",
+    "LLMOptimizer",
+    "OptimizerServiceError",
+    "OptimizerValidationError",
+    "OptimizerSuggestionNotFoundError",
+    "create_default_optimizer_service",
+    "get_optimizer_service",
     "TrainingService",
     "TrainingServiceError",
     "TrainingJobNotFoundError",

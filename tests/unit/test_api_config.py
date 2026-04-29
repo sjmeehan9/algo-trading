@@ -44,6 +44,21 @@ def test_api_config_supports_json_list_for_cors(
     ]
 
 
+def test_api_config_reads_openai_key_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """APIConfig should read the standard OpenAI key environment variable."""
+
+    monkeypatch.setenv("ALGOTRADING_API_KEY", "api-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.setenv("ALGOTRADING_OPENAI_MODEL", "gpt-test")
+
+    config = APIConfig()
+
+    assert config.openai_api_key == "openai-key"
+    assert config.openai_model == "gpt-test"
+
+
 def test_api_config_requires_non_empty_api_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

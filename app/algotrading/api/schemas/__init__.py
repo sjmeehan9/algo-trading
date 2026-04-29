@@ -27,6 +27,16 @@ from algotrading.api.schemas.models import (
     ModelType,
     SupportingModelConfig,
 )
+from algotrading.api.schemas.optimizer import (
+    AppliedSuggestionResponse,
+    ApplySuggestionRequest,
+    HyperparameterSuggestion,
+    OptimizationResult,
+    OptimizationSource,
+    OptimizerAnalyzeRequest,
+    SuggestionConfidence,
+    SuggestionOutcomeStatus,
+)
 from algotrading.api.schemas.strategies import StrategyDetail, StrategyInfo
 from algotrading.api.schemas.training import (
     TrainingJob,
@@ -62,6 +72,14 @@ __all__ = [
     "GenerationDetail",
     "GenerationComparison",
     "GenerationComparisonRequest",
+    "SuggestionConfidence",
+    "OptimizationSource",
+    "SuggestionOutcomeStatus",
+    "OptimizerAnalyzeRequest",
+    "HyperparameterSuggestion",
+    "OptimizationResult",
+    "ApplySuggestionRequest",
+    "AppliedSuggestionResponse",
     "TrainingJob",
     "TrainingJobCreate",
     "TrainingQueueReorderRequest",

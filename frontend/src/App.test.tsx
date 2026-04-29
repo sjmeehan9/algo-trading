@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { backtestingApi } from './api/backtesting';
 import { modelsApi } from './api/models';
+import { optimizerApi } from './api/optimizer';
 import { trainingApi } from './api/training';
 import App from './App';
 
@@ -67,6 +68,14 @@ vi.mock('./api/backtesting', () => ({
   },
 }));
 
+vi.mock('./api/optimizer', () => ({
+  optimizerApi: {
+    analyze: vi.fn(),
+    getLatest: vi.fn().mockResolvedValue(null),
+    apply: vi.fn(),
+  },
+}));
+
 vi.mock('./api/websocket', () => ({
   wsClient: {
     subscribe: vi.fn(() => vi.fn()),
@@ -79,6 +88,7 @@ describe('App', () => {
     vi.mocked(modelsApi.list).mockResolvedValue(createEmptyPaginated());
     vi.mocked(trainingApi.listJobs).mockResolvedValue([]);
     vi.mocked(trainingApi.listGenerations).mockResolvedValue(createEmptyPaginated());
+    vi.mocked(optimizerApi.getLatest).mockResolvedValue(null);
     vi.mocked(backtestingApi.list).mockResolvedValue(createEmptyPaginated());
     vi.mocked(backtestingApi.getTrades).mockResolvedValue([]);
   });

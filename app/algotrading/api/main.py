@@ -13,6 +13,7 @@ from algotrading.api.routers import (
     backtesting_router,
     generations_router,
     models_router,
+    optimizer_router,
     strategies_router,
     training_router,
 )
@@ -89,6 +90,7 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
     app.include_router(generations_router, prefix="/api/v1")
     app.include_router(training_router, prefix="/api/v1")
     app.include_router(backtesting_router, prefix="/api/v1")
+    app.include_router(optimizer_router, prefix="/api/v1")
 
     @app.exception_handler(StarletteHTTPException)
     async def handle_http_exception(_, exc: StarletteHTTPException) -> JSONResponse:
