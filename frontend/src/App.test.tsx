@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { backtestingApi } from './api/backtesting';
 import { modelsApi } from './api/models';
 import { trainingApi } from './api/training';
 import App from './App';
@@ -50,6 +51,22 @@ vi.mock('./api/training', () => ({
   },
 }));
 
+vi.mock('./api/backtesting', () => ({
+  backtestingApi: {
+    run: vi.fn(),
+    list: vi.fn().mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 100,
+      pages: 0,
+    }),
+    get: vi.fn(),
+    getTrades: vi.fn().mockResolvedValue([]),
+    compare: vi.fn(),
+  },
+}));
+
 vi.mock('./api/websocket', () => ({
   wsClient: {
     subscribe: vi.fn(() => vi.fn()),
@@ -62,6 +79,8 @@ describe('App', () => {
     vi.mocked(modelsApi.list).mockResolvedValue(createEmptyPaginated());
     vi.mocked(trainingApi.listJobs).mockResolvedValue([]);
     vi.mocked(trainingApi.listGenerations).mockResolvedValue(createEmptyPaginated());
+    vi.mocked(backtestingApi.list).mockResolvedValue(createEmptyPaginated());
+    vi.mocked(backtestingApi.getTrades).mockResolvedValue([]);
   });
 
   it('renders the dashboard route without crashing', () => {
