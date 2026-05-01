@@ -12,6 +12,16 @@ from algotrading.api.schemas.backtesting import (
     TradeRecord,
 )
 from algotrading.api.schemas.common import APIError, APIResponse, PaginatedResponse
+from algotrading.api.schemas.deployment import (
+    DeploymentBacktestSummary,
+    DeploymentCandidate,
+    DeploymentGenerationSummary,
+    DeploymentReadiness,
+    DeploymentSelection,
+    DeploymentValidationRequest,
+    ReadinessCheck,
+    ReadinessCheckStatus,
+)
 from algotrading.api.schemas.generations import (
     GenerationComparison,
     GenerationComparisonRequest,
@@ -50,6 +60,14 @@ __all__ = [
     "APIError",
     "APIResponse",
     "PaginatedResponse",
+    "ReadinessCheckStatus",
+    "ReadinessCheck",
+    "DeploymentReadiness",
+    "DeploymentValidationRequest",
+    "DeploymentBacktestSummary",
+    "DeploymentGenerationSummary",
+    "DeploymentCandidate",
+    "DeploymentSelection",
     "BacktestStatus",
     "TradeAction",
     "BacktestRequest",

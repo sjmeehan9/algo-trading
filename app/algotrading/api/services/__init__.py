@@ -13,6 +13,14 @@ from algotrading.api.services.backtest_service import (
     create_default_backtest_service,
     get_backtest_service,
 )
+from algotrading.api.services.deployment_service import (
+    DeploymentSelectionNotFoundError,
+    DeploymentService,
+    DeploymentServiceError,
+    DeploymentValidationError,
+    create_default_deployment_service,
+    get_deployment_service,
+)
 from algotrading.api.services.llm_optimizer import (
     LLMOptimizer,
     OptimizerServiceError,
@@ -61,6 +69,12 @@ __all__ = [
     "MetricsCalculator",
     "create_default_backtest_service",
     "get_backtest_service",
+    "DeploymentService",
+    "DeploymentServiceError",
+    "DeploymentValidationError",
+    "DeploymentSelectionNotFoundError",
+    "create_default_deployment_service",
+    "get_deployment_service",
     "ModelService",
     "ModelServiceError",
     "ModelValidationError",

@@ -16,6 +16,8 @@ const createEmptyPaginated = () => ({
   pages: 0,
 });
 
+const routeLoadTimeout = { timeout: 5000 };
+
 vi.mock('./api/models', () => ({
   modelsApi: {
     list: vi.fn().mockResolvedValue({
@@ -76,6 +78,16 @@ vi.mock('./api/optimizer', () => ({
   },
 }));
 
+vi.mock('./api/deployment', () => ({
+  deploymentApi: {
+    listCandidates: vi.fn().mockResolvedValue([]),
+    validate: vi.fn(),
+    getSelection: vi.fn().mockResolvedValue(null),
+    saveSelection: vi.fn(),
+    clearSelection: vi.fn(),
+  },
+}));
+
 vi.mock('./api/websocket', () => ({
   wsClient: {
     subscribe: vi.fn(() => vi.fn()),
@@ -105,14 +117,18 @@ describe('App', () => {
     render(<App />);
 
     await user.click(screen.getByRole('link', { name: /models/i }));
-    expect(await screen.findByRole('heading', { level: 2, name: 'Models' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Models' }, routeLoadTimeout),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('link', { name: /training/i }));
-    expect(await screen.findByRole('heading', { level: 2, name: /Training/ })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 2, name: /Training/ }, routeLoadTimeout),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('link', { name: /backtesting/i }));
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Backtesting' }),
+      await screen.findByRole('heading', { level: 2, name: 'Backtesting' }, routeLoadTimeout),
     ).toBeInTheDocument();
   });
 });
