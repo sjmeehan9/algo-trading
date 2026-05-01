@@ -23,6 +23,12 @@ setup(
         'Operating System :: OS Independent',
     ],
     install_requires=[
+        'fastapi>=0.110.0',
+        'uvicorn>=0.29.0',
+        'pydantic>=2.7.0',
+        'pydantic-settings>=2.2.1',
+        'python-multipart>=0.0.9',
+        'websockets>=12.0',
         'gymnasium>=0.29.1',
         'jsonschema>=4.21.1',
         'numpy>=1.26.3',
@@ -31,13 +37,15 @@ setup(
         'PyYAML>=6.0.1',
         'scikit-learn>=1.3.2',
         'stable_baselines3>=2.3.2',
-        'tensorflow>=2.16.1'
+        'tensorflow>=2.16.1',
+        'openai>=1.30.0',
     ],
     extras_require={
         'dev': [
             'pytest>=7.0',
             'pytest-cov>=4.1.0',
             'pytest-mock>=3.12.0',
+            'httpx>=0.28.0',
             'twine>=4.0.2',
         ],
     },
