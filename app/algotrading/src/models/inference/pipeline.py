@@ -157,6 +157,40 @@ class InferencePipeline:
 
         return self._cache.get_latest_before(model_id, timestamp)
 
+    def submit_record(self, record: DataRecord) -> list[Future[InferenceResult]]:
+        """Submit one data record directly to matching supporting providers.
+
+        This is used by live trading paths where broker callbacks already have a
+        normalized market record and do not need a ``DataSource`` streaming loop.
+        The same completion callbacks, cache updates, listeners, and metrics are
+        used as router-driven inference.
+        """
+
+        with self._state_lock:
+            if not self._running or self._executor is None:
+                return []
+            executor = self._executor
+
+        providers = self._find_models_for_data_type(record.data_type)
+        if not providers:
+            return []
+
+        futures: list[Future[InferenceResult]] = []
+        for provider in providers:
+            model_id = self._resolve_provider_id(provider)
+            task = InferenceTask(
+                task_id=str(uuid4()),
+                model_id=model_id,
+                data=record,
+                submitted_at=datetime.now(tz=UTC),
+                timeout_seconds=self._get_timeout(model_id),
+            )
+            future = executor.submit(task, provider)
+            future.add_done_callback(self._on_inference_complete)
+            futures.append(future)
+
+        return futures
+
     def get_metrics(self) -> InferenceMetrics:
         """Return a snapshot copy of current inference metrics."""
 
@@ -368,26 +402,7 @@ class InferencePipeline:
     def _on_data_received(self, record: DataRecord) -> None:
         """Handle router data callback by dispatching provider inference tasks."""
 
-        with self._state_lock:
-            if not self._running or self._executor is None:
-                return
-            executor = self._executor
-
-        providers = self._find_models_for_data_type(record.data_type)
-        if not providers:
-            return
-
-        for provider in providers:
-            model_id = self._resolve_provider_id(provider)
-            task = InferenceTask(
-                task_id=str(uuid4()),
-                model_id=model_id,
-                data=record,
-                submitted_at=datetime.now(tz=UTC),
-                timeout_seconds=self._get_timeout(model_id),
-            )
-            future = executor.submit(task, provider)
-            future.add_done_callback(self._on_inference_complete)
+        self.submit_record(record)
 
     def _on_inference_complete(self, future: Future[InferenceResult]) -> None:
         """Handle completed inference futures and update cache and metrics."""

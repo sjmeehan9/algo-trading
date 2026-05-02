@@ -5,6 +5,7 @@ from threading import Timer
 import pandas as pd
 from algotrading.src.broker import (
     AccountInfo,
+    BarData,
     BrokerAdapter,
     ContractSpec,
     InstrumentType,
@@ -12,6 +13,7 @@ from algotrading.src.broker import (
     OrderStatus,
     PositionInfo,
 )
+from algotrading.src.trading.inference import RealTimeInferencePipeline, TradingDecision
 
 from ..exceptions import BrokerConnectionError
 from ..models.predict import Predict
@@ -40,6 +42,7 @@ class Trading:
         config: dict,
         pipeline: dict,
         adapter: BrokerAdapter | None = None,
+        inference_pipeline: RealTimeInferencePipeline | None = None,
     ):
         """Initialise trading session.
 
@@ -48,14 +51,21 @@ class Trading:
             pipeline: Pipeline configuration dictionary.
             adapter: Broker adapter instance; defaults to
                 ``InteractiveBrokersAdapter`` when *None*.
+            inference_pipeline: Optional real-time inference pipeline used for
+                core RL decisions with supporting model signals.
         """
         self.logger = logger
 
         self.config = config
         self.pipeline = pipeline
         self.adapter = adapter if adapter is not None else InteractiveBrokersAdapter()
+        self.inference_pipeline = inference_pipeline
 
-        self.predict = Predict(self.config, self.pipeline)
+        self.predict = (
+            Predict(self.config, self.pipeline)
+            if self.inference_pipeline is None
+            else None
+        )
         self.order = OrderManager(self.config, self.pipeline)
         self.tools = TradingTools(self.pipeline)
         self.payload = Payload()
@@ -256,15 +266,30 @@ class Trading:
             self.payload.active_pos = self.payload.last_pos
             self.payload.release_trade = False
 
-        action, _ = self.predict.get_action(state)
+        if self.inference_pipeline is None:
+            if self.predict is None:
+                raise RuntimeError("Predictor is not configured")
+            action, _ = self.predict.get_action(state)
+            self.payload.action_int = action.item()
+            prediction_log_value = action.item()
+        else:
+            decision = self._run_realtime_inference(state_df)
+            min_confidence = self._get_min_inference_confidence()
+            action_str = (
+                decision.action
+                if decision.should_execute(min_confidence=min_confidence)
+                else "HOLD"
+            )
+            self.payload.action_int = self._decision_action_to_int(action_str)
+            self.payload.last_decision = decision
+            prediction_log_value = decision.to_dict()
 
-        self.payload.action_int = action.item()
         self.payload.action_int = self.tools.stop_take(self.payload.action_int, state)
 
         self.payload.action_str = self.payload.action_dict[self.payload.action_int]
 
         self.logger.info(
-            f"action taken: {self.payload.action_str}, prediction: {action.item()}"
+            f"action taken: {self.payload.action_str}, prediction: {prediction_log_value}"
         )
 
         take_action = self.order.checkAction(
@@ -283,6 +308,71 @@ class Trading:
             self.payload.action_str = self.payload.action_dict[self.payload.action_int]
 
         return None
+
+    def _run_realtime_inference(self, state_df: pd.DataFrame) -> TradingDecision:
+        """Run the injected real-time pipeline against the latest market row."""
+
+        if self.inference_pipeline is None:
+            raise RuntimeError("inference_pipeline is not configured")
+        if not self.inference_pipeline.is_running():
+            self.inference_pipeline.start_sync()
+        return self.inference_pipeline.process_market_data_sync(
+            self._state_df_to_bar_data(state_df)
+        )
+
+    def _state_df_to_bar_data(self, state_df: pd.DataFrame) -> BarData:
+        """Convert the latest live state dataframe row to broker-normalized bar data."""
+
+        if state_df.empty:
+            raise ValueError("state_df must include at least one row")
+
+        row = state_df.iloc[-1]
+        timestamp = self._coerce_bar_timestamp(row["date"])
+        return BarData(
+            timestamp=timestamp,
+            open=float(row["open"]),
+            high=float(row["high"]),
+            low=float(row["low"]),
+            close=float(row["close"]),
+            volume=int(row["volume"]),
+            vwap=float(row["wap"] if "wap" in row else row.get("vwap", 0.0)),
+            trade_count=int(
+                row["count"] if "count" in row else row.get("trade_count", 0)
+            ),
+        )
+
+    def _coerce_bar_timestamp(self, value: object) -> datetime.datetime:
+        """Convert dataframe timestamp values to timezone-aware datetimes."""
+
+        if isinstance(value, pd.Timestamp):
+            timestamp = value.to_pydatetime()
+        elif isinstance(value, datetime.datetime):
+            timestamp = value
+        elif isinstance(value, (int, float)):
+            timestamp = datetime.datetime.fromtimestamp(
+                float(value),
+                tz=datetime.timezone.utc,
+            )
+        else:
+            timestamp = pd.Timestamp(value).to_pydatetime()
+
+        if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+            return timestamp.replace(tzinfo=datetime.timezone.utc)
+        return timestamp
+
+    def _decision_action_to_int(self, action: str) -> int:
+        """Convert a real-time decision action string to legacy action integer."""
+
+        if action == "HOLD":
+            return self.ACTIONS["NONE"]
+        return int(self.ACTIONS.get(action, self.ACTIONS["NONE"]))
+
+    def _get_min_inference_confidence(self) -> float:
+        """Return configured confidence threshold for real-time decisions."""
+
+        trading_config = self.pipeline.get("pipeline", {}).get("trading_config", {})
+        raw_value = trading_config.get("min_confidence", 0.5)
+        return float(raw_value)
 
     def executeOrder(self) -> None:
         """Build and submit an order through the broker adapter."""
@@ -348,6 +438,9 @@ class Trading:
         """Disconnect from the broker adapter."""
 
         self.logger.info("Trading connection closed")
+
+        if self.inference_pipeline is not None and self.inference_pipeline.is_running():
+            self.inference_pipeline.stop_sync()
 
         if self._connected:
             self.adapter.disconnect()
