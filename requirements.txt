@@ -20,5 +20,6 @@ pytest-asyncio>=1.0  # async test support for FastAPI training endpoints
 httpx>=0.28.0  # required by FastAPI TestClient
 isort>=7.0.0
 requests>=2.31.0
+alpaca-py>=0.28.1  # official Alpaca Trading/Data API SDK for the Alpaca broker adapter
 vaderSentiment>=3.3.2
 openai>=1.30.0  # LLM hyperparameter optimizer integration

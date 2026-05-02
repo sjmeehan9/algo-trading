@@ -7,6 +7,7 @@ from algotrading.src.broker.adapter import (
     OrderCallback,
     PositionCallback,
 )
+from algotrading.src.broker.adapters.alpaca import AlpacaAdapter
 from algotrading.src.broker.exceptions import (
     BrokerConnectionError,
     BrokerDataError,
@@ -49,6 +50,7 @@ PositionList = list[PositionInfo]
 __all__ = [
     "AccountCallback",
     "AccountInfo",
+    "AlpacaAdapter",
     "BarData",
     "BarLike",
     "BarSeries",

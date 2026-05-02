@@ -36,6 +36,23 @@ _IB_CONFIRMATION_PROMPT = (
     "  Type 'yes' to proceed or 'no' to skip: "
 )
 
+_ALPACA_CONFIRMATION_PROMPT = (
+    "\n"
+    + "=" * 60
+    + "\n"
+    + "  ALPACA INTEGRATION TEST — PRE-FLIGHT CHECK\n"
+    + "=" * 60
+    + "\n"
+    + "  Please confirm the following before continuing:\n"
+    + "\n"
+    + "  1. ALPACA_API_KEY is set in your environment\n"
+    + "  2. ALPACA_SECRET_KEY is set in your environment\n"
+    + "  3. The keys are paper-trading keys\n"
+    + "  4. External Alpaca API calls are acceptable for this test session\n"
+    + "\n"
+    + "  Type 'yes' to proceed or 'no' to skip: "
+)
+
 _NEWS_CONFIRMATION_PROMPT = (
     "\n"
     + "=" * 60
@@ -73,6 +90,27 @@ def confirm_ib_gateway() -> dict[str, Any]:
         pytest.skip("Developer declined IB confirmation prompt.")
 
     return {"host": "127.0.0.1", "port": 7497, "client_id": 100}
+
+
+@pytest.fixture(scope="session")
+def confirm_alpaca_paper() -> dict[str, str]:
+    """Prompt once to confirm Alpaca paper trading credentials are configured."""
+
+    try:
+        answer = input(_ALPACA_CONFIRMATION_PROMPT).strip().lower()
+    except EOFError:
+        pytest.skip("Non-interactive environment — cannot confirm Alpaca credentials.")
+
+    if answer != "yes":
+        pytest.skip("Developer declined Alpaca confirmation prompt.")
+
+    api_key = os.getenv("ALPACA_API_KEY") or os.getenv("ALGOTRADING_ALPACA_API_KEY")
+    secret_key = os.getenv("ALPACA_SECRET_KEY") or os.getenv(
+        "ALGOTRADING_ALPACA_SECRET_KEY"
+    )
+    if not api_key or not secret_key:
+        pytest.skip("Alpaca paper credentials are not set in the environment.")
+    return {"api_key": api_key, "secret_key": secret_key}
 
 
 @pytest.fixture(scope="session")

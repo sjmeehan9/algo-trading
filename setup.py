@@ -39,6 +39,8 @@ setup(
         'stable_baselines3>=2.3.2',
         'tensorflow>=2.16.1',
         'openai>=1.30.0',
+        # Official Alpaca Trading/Data API SDK for the Alpaca broker adapter.
+        'alpaca-py>=0.28.1',
     ],
     extras_require={
         'dev': [

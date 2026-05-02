@@ -22,6 +22,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Run tests marked 'requires_ib' with interactive TWS confirmation.",
     )
     parser.addoption(
+        "--alpaca-confirm",
+        action="store_true",
+        default=False,
+        help="Run tests marked 'requires_alpaca' with Alpaca paper credentials.",
+    )
+    parser.addoption(
         "--news-api-confirm",
         action="store_true",
         default=False,
@@ -44,6 +50,17 @@ def pytest_collection_modifyitems(
         for item in items:
             if "requires_ib" in item.keywords:
                 item.add_marker(skip_ib)
+
+    if not config.getoption("--alpaca-confirm"):
+        skip_alpaca = pytest.mark.skip(
+            reason=(
+                "Alpaca tests require --alpaca-confirm flag and configured paper "
+                "trading credentials."
+            )
+        )
+        for item in items:
+            if "requires_alpaca" in item.keywords:
+                item.add_marker(skip_alpaca)
 
     if not config.getoption("--news-api-confirm"):
         skip_news = pytest.mark.skip(
