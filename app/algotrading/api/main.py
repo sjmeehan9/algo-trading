@@ -16,6 +16,7 @@ from algotrading.api.routers import (
     models_router,
     optimizer_router,
     strategies_router,
+    trading_router,
     training_router,
 )
 from algotrading.api.schemas import APIError
@@ -93,6 +94,7 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
     app.include_router(backtesting_router, prefix="/api/v1")
     app.include_router(optimizer_router, prefix="/api/v1")
     app.include_router(deployment_router, prefix="/api/v1")
+    app.include_router(trading_router, prefix="/api/v1")
 
     @app.exception_handler(StarletteHTTPException)
     async def handle_http_exception(_, exc: StarletteHTTPException) -> JSONResponse:
@@ -146,6 +148,9 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         training_service = getattr(app.state, "training_service", None)
         if training_service is not None:
             await training_service.stop()
+        session_manager = getattr(app.state, "trading_session_manager", None)
+        if session_manager is not None:
+            await session_manager.shutdown(close_positions=False)
 
     @app.get("/health", tags=["system"])
     async def health_check() -> dict[str, str]:

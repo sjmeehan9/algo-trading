@@ -342,6 +342,53 @@ class BrokerRegistry:
         logger.info("Switched to broker: %s", normalised_name)
         return adapter
 
+    def create_broker(
+        self,
+        broker_name: str,
+        config: BrokerConfig | Mapping[str, object] | None = None,
+        connection_params: Mapping[str, object] | None = None,
+    ) -> BrokerAdapter:
+        """Create a connected broker without replacing the active broker.
+
+        This is intended for trading sessions that need independent adapter
+        instances, potentially across different brokers, while preserving the
+        singleton active broker used by older call sites.
+
+        Args:
+            broker_name: Registered broker name to instantiate.
+            config: Broker registry config, broker-specific adapter config, or
+                ``None`` to load ``brokers.yml``.
+            connection_params: Optional explicit connection parameters.
+
+        Returns:
+            Connected broker adapter instance.
+
+        Raises:
+            ValueError: If the broker name is not registered.
+            BrokerConnectionError: If initialization or connection fails.
+        """
+
+        normalised_name = _normalise_broker_name(broker_name)
+        if not self._is_registered(normalised_name):
+            raise ValueError(f"Unknown broker: {broker_name}")
+
+        if config is None:
+            broker_config = self.load_config()
+            adapter_config = broker_config.adapter_config(normalised_name)
+            connect_config = broker_config.connection_config(normalised_name)
+            if connection_params is not None:
+                connect_config.update(dict(connection_params))
+        else:
+            adapter_config, connect_config = self._switch_configs(
+                normalised_name,
+                config,
+                connection_params,
+            )
+        adapter = self._create_adapter(normalised_name, adapter_config)
+        self._connect_adapter(normalised_name, adapter, connect_config)
+        logger.info("Created independent broker adapter: %s", normalised_name)
+        return adapter
+
     def load_config(self) -> BrokerConfig:
         """Load broker configuration from the registry config path."""
 

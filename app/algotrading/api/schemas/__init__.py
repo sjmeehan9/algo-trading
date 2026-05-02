@@ -48,6 +48,11 @@ from algotrading.api.schemas.optimizer import (
     SuggestionOutcomeStatus,
 )
 from algotrading.api.schemas.strategies import StrategyDetail, StrategyInfo
+from algotrading.api.schemas.trading import (
+    TradingSessionCreateRequest,
+    TradingSessionStatus,
+    TradingSessionStopRequest,
+)
 from algotrading.api.schemas.training import (
     TrainingJob,
     TrainingJobCreate,
@@ -103,4 +108,7 @@ __all__ = [
     "TrainingQueueReorderRequest",
     "TrainingJobStatus",
     "TrainingProgress",
+    "TradingSessionCreateRequest",
+    "TradingSessionStatus",
+    "TradingSessionStopRequest",
 ]
