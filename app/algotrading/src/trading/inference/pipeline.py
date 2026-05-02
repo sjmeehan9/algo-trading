@@ -17,6 +17,7 @@ from algotrading.src.models.inference import InferencePipeline, InferenceResult
 from algotrading.src.models.registry import SupportingModelRegistry
 from algotrading.src.models.registry.model_entry import ModelState
 from algotrading.src.models.signals import ModelSignal
+from algotrading.src.trading.deployment import validate_core_model_instance
 from algotrading.src.trading.inference.aggregator import AlignedSignal, SignalAggregator
 from algotrading.src.trading.inference.decision import TradingDecision
 from algotrading.src.trading.inference.latency import LatencyTracker
@@ -56,6 +57,11 @@ class RealTimeInferencePipeline:
         self.config = dict(config or {})
         self.supporting_inference_pipeline = supporting_inference_pipeline
 
+        validate_core_model_instance(
+            self.core_model,
+            configured_model_type=self._configured_deployment_model_type(),
+        )
+
         self.stale_threshold = float(self.config.get("stale_signal_threshold", 60.0))
         if self.stale_threshold <= 0 or not isfinite(self.stale_threshold):
             raise ValueError("stale_signal_threshold must be finite and greater than 0")
@@ -80,6 +86,25 @@ class RealTimeInferencePipeline:
 
         if hasattr(self.core_model, "ensure_trained"):
             self.core_model.ensure_trained()
+
+    def _configured_deployment_model_type(self) -> object | None:
+        """Return an explicit deployment model category from runtime config."""
+
+        for key in ("deployment_model_type", "model_category", "root_model_type"):
+            value = self.config.get(key)
+            if value is not None:
+                return value
+
+        model_type = self.config.get("model_type")
+        if isinstance(model_type, str) and model_type in {
+            "core_rl",
+            "supporting_ml",
+            "supporting_rl",
+            "strategy",
+        }:
+            return model_type
+
+        return None
 
     async def start(
         self,

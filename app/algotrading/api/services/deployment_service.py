@@ -10,6 +10,7 @@ from threading import RLock
 
 from algotrading.api.schemas.backtesting import BacktestResult, BacktestStatus
 from algotrading.api.schemas.deployment import (
+    DeployableModel,
     DeploymentBacktestSummary,
     DeploymentCandidate,
     DeploymentGenerationSummary,
@@ -28,6 +29,11 @@ from algotrading.api.services.model_service import (
 )
 from algotrading.src.models.registry import ModelState
 from algotrading.src.models.tracking import EvaluationMetrics, Generation
+from algotrading.src.trading.deployment import (
+    DeploymentAuditLog,
+    DeploymentValidator,
+    InvalidDeploymentError,
+)
 from fastapi import Request
 
 logger = logging.getLogger(__name__)
@@ -61,6 +67,7 @@ class DeploymentService:
         model_service: ModelService,
         backtest_service: BacktestService | None = None,
         selection_path: str | Path | None = None,
+        audit_log: DeploymentAuditLog | None = None,
     ) -> None:
         """Initialize service dependencies.
 
@@ -68,11 +75,22 @@ class DeploymentService:
             model_service: Model/generation registry business service.
             backtest_service: Optional service used to discover stored backtests.
             selection_path: Optional JSON path for persisted selected candidate.
+            audit_log: Optional deployment audit log override.
         """
 
         self.model_service = model_service
         self.backtest_service = backtest_service
         self._selection_path = Path(selection_path) if selection_path else None
+        audit_path = (
+            self._selection_path.parent / "deployment_audit.jsonl"
+            if self._selection_path is not None
+            else None
+        )
+        self.audit_log = audit_log or DeploymentAuditLog(log_path=audit_path)
+        self.deployment_validator = DeploymentValidator(
+            model_service=self.model_service,
+            audit_log=self.audit_log,
+        )
         self._lock = RLock()
 
     def list_candidates(self) -> list[DeploymentCandidate]:
@@ -110,6 +128,14 @@ class DeploymentService:
         model, generation = self._resolve_selection(request)
         return self._evaluate_readiness(model=model, generation=generation)
 
+    def list_deployable_models(self) -> list[DeployableModel]:
+        """Return trained core RL models that pass hard deployment validation."""
+
+        return [
+            DeployableModel.model_validate(item)
+            for item in self.deployment_validator.get_deployable_models()
+        ]
+
     def save_selection(
         self,
         request: DeploymentValidationRequest,
@@ -117,11 +143,52 @@ class DeploymentService:
     ) -> DeploymentSelection:
         """Persist a validated deployment candidate selection."""
 
-        model, generation = self._resolve_selection(request)
-        readiness = self._evaluate_readiness(model=model, generation=generation)
-        if not readiness.deployable:
-            details = "; ".join(readiness.errors) or "Candidate is not deployable"
-            raise DeploymentValidationError(details)
+        logged = False
+        try:
+            model, generation = self._resolve_selection(request)
+            self.deployment_validator.validate_deployment(
+                model_id=request.model_id,
+                user_id=selected_by,
+                deployment_mode="paper",
+                generation_id=request.generation_id,
+                record_audit=False,
+            )
+            readiness = self._evaluate_readiness(model=model, generation=generation)
+            if not readiness.deployable:
+                details = "; ".join(readiness.errors) or "Candidate is not deployable"
+                self._log_deployment_attempt(
+                    request=request,
+                    selected_by=selected_by,
+                    result="rejected",
+                    reason=details,
+                    model_type=_model_type_value(model.model_type),
+                )
+                logged = True
+                raise DeploymentValidationError(details)
+        except InvalidDeploymentError as exc:
+            if not logged:
+                self._log_deployment_attempt(
+                    request=request,
+                    selected_by=selected_by,
+                    result="rejected",
+                    reason=str(exc),
+                    model_type=self._safe_model_type(request.model_id),
+                )
+            raise DeploymentValidationError(str(exc)) from exc
+        except (
+            ModelNotFoundError,
+            GenerationNotFoundError,
+            DeploymentValidationError,
+        ) as exc:
+            if not logged:
+                self._log_deployment_attempt(
+                    request=request,
+                    selected_by=selected_by,
+                    result="rejected",
+                    reason=str(exc),
+                    model_type=self._safe_model_type(request.model_id),
+                )
+            raise
 
         candidate = self._build_candidate(
             model, selected_generation_id=generation.generation_id
@@ -135,6 +202,13 @@ class DeploymentService:
             selected_by=selected_by,
         )
         self._persist_selection(selection)
+        self._log_deployment_attempt(
+            request=request,
+            selected_by=selected_by,
+            result="approved",
+            reason=None,
+            model_type=_model_type_value(model.model_type),
+        )
         return selection
 
     def get_selection(self) -> DeploymentSelection:
@@ -520,6 +594,36 @@ class DeploymentService:
                 encoding="utf-8",
             )
 
+    def _safe_model_type(self, model_id: str) -> str | None:
+        """Best-effort model type lookup for rejected audit events."""
+
+        try:
+            return _model_type_value(self.model_service.get_model(model_id).model_type)
+        except Exception:
+            return None
+
+    def _log_deployment_attempt(
+        self,
+        *,
+        request: DeploymentValidationRequest,
+        selected_by: str | None,
+        result: str,
+        reason: str | None,
+        model_type: str | None,
+    ) -> None:
+        """Record a persisted deployment-selection attempt."""
+
+        self.audit_log.log_attempt(
+            model_id=request.model_id,
+            user_id=selected_by,
+            mode="paper",
+            result=result,
+            reason=reason,
+            model_type=model_type,
+            generation_id=request.generation_id,
+            endpoint="deployment_selection",
+        )
+
 
 class _ReadinessBuilder:
     """Collect readiness checks while preserving errors and warnings."""
@@ -615,6 +719,12 @@ def _evaluation_metrics_to_dict(
             }
         )
     return result
+
+
+def _model_type_value(model_type: object) -> str:
+    """Return a string value for model-type enums or raw strings."""
+
+    return str(getattr(model_type, "value", model_type))
 
 
 def create_default_deployment_service(

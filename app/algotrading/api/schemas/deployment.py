@@ -94,6 +94,15 @@ class DeploymentSelection(BaseModel):
     selected_by: str | None = None
 
 
+class DeployableModel(BaseModel):
+    """Compact model summary for deployment roots that pass hard validation."""
+
+    model_id: str
+    name: str
+    latest_generation: str
+    metrics: dict[str, float | int | str | bool | None] = Field(default_factory=dict)
+
+
 __all__ = [
     "ReadinessCheckStatus",
     "ReadinessCheck",
@@ -103,4 +112,5 @@ __all__ = [
     "DeploymentGenerationSummary",
     "DeploymentCandidate",
     "DeploymentSelection",
+    "DeployableModel",
 ]

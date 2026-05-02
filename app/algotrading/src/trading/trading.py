@@ -13,6 +13,7 @@ from algotrading.src.broker import (
     OrderStatus,
     PositionInfo,
 )
+from algotrading.src.trading.deployment import validate_pipeline_deployment_config
 from algotrading.src.trading.inference import RealTimeInferencePipeline, TradingDecision
 
 from ..exceptions import BrokerConnectionError
@@ -111,6 +112,11 @@ class Trading:
 
         self.account = self.config["account_number"]
         self.enable_trading = self.config["stream_data"] == self.ELIGABLE_STREAM
+        if self.enable_trading:
+            validate_pipeline_deployment_config(
+                self.pipeline,
+                deployment_mode=str(self.config.get("deployment_mode", "paper")),
+            )
         self.logger.info(f"Enable trading: {self.enable_trading}")
 
         client_id = self.pipeline["pipeline"]["client_id"]

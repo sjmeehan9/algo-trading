@@ -20,6 +20,7 @@ from algotrading.src.models.tracking import (
     JsonFileStorage,
     TrainingMetrics,
 )
+from algotrading.src.trading.deployment import DeploymentAuditLog
 from fastapi.testclient import TestClient
 
 
@@ -122,6 +123,7 @@ def _api_client(tmp_path: Path) -> tuple[TestClient, ModelService]:
     app.state.deployment_service = DeploymentService(
         model_service=model_service,
         selection_path=tmp_path / "deployment_selection.json",
+        audit_log=DeploymentAuditLog(tmp_path / "deployment_audit.jsonl"),
     )
     return TestClient(app), model_service
 
@@ -156,6 +158,66 @@ def test_validation_rejects_supporting_models_as_roots(tmp_path: Path) -> None:
     assert response.json()["error_code"] == "DEPLOYMENT_VALIDATION_ERROR"
 
 
+def test_deployable_models_endpoint_returns_trained_core_roots(tmp_path: Path) -> None:
+    """Hard-gate deployable-model listing should return trained core RL roots."""
+
+    client, model_service = _api_client(tmp_path)
+    model_id = _create_core_model(model_service)
+    generation_id = _add_evaluated_generation(model_service, model_id)
+    _create_supporting_model(model_service)
+
+    response = client.get(
+        "/api/v1/deployment/deployable-models",
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 200, response.text
+    deployable = response.json()["data"]
+    assert deployable == [
+        {
+            "model_id": model_id,
+            "name": "Deployable Core",
+            "latest_generation": generation_id,
+            "metrics": {
+                "final_reward": 2.0,
+                "mean_reward": 1.6,
+                "std_reward": 0.2,
+                "episodes_completed": 9,
+                "timesteps_trained": 9000,
+                "training_time_seconds": 180.0,
+                "sharpe_ratio": 1.3,
+                "max_drawdown": 0.05,
+                "total_return": 0.14,
+                "win_rate": 0.58,
+                "profit_factor": 1.8,
+                "num_trades": 18,
+            },
+        }
+    ]
+
+
+def test_selection_rejects_and_audits_supporting_model_root(tmp_path: Path) -> None:
+    """Deployment selection writes an audit event for rejected non-RL roots."""
+
+    client, model_service = _api_client(tmp_path)
+    supporting_model_id = _create_supporting_model(model_service)
+
+    response = client.put(
+        "/api/v1/deployment/selection",
+        headers={**_auth_headers(), "X-User": "api-test"},
+        json={"model_id": supporting_model_id, "generation_id": "any"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "DEPLOYMENT_VALIDATION_ERROR"
+
+    audit_log = DeploymentAuditLog(tmp_path / "deployment_audit.jsonl")
+    attempts = audit_log.get_attempts(model_id=supporting_model_id)
+    assert attempts[-1].result == "rejected"
+    assert attempts[-1].user_id == "api-test"
+    assert attempts[-1].model_type == "supporting_ml"
+
+
 def test_persist_and_retrieve_valid_deployment_selection(tmp_path: Path) -> None:
     """A valid deployment candidate should save and reload through the API."""
 
@@ -173,6 +235,10 @@ def test_persist_and_retrieve_valid_deployment_selection(tmp_path: Path) -> None
     assert saved["model_id"] == model_id
     assert saved["generation_id"] == generation_id
     assert saved["readiness"]["deployable"] is True
+    audit_log = DeploymentAuditLog(tmp_path / "deployment_audit.jsonl")
+    attempts = audit_log.get_attempts(model_id=model_id)
+    assert attempts[-1].result == "approved"
+    assert attempts[-1].generation_id == generation_id
 
     get_response = client.get("/api/v1/deployment/selection", headers=_auth_headers())
     assert get_response.status_code == 200

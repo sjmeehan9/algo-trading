@@ -26,6 +26,7 @@ from algotrading.src.models.tracking import (
     JsonFileStorage,
     TrainingMetrics,
 )
+from algotrading.src.trading.deployment import DeploymentAuditLog
 
 
 @pytest.fixture()
@@ -189,6 +190,7 @@ def test_selection_persistence_create_read_clear(
     service = DeploymentService(
         model_service=model_service,
         selection_path=selection_path,
+        audit_log=DeploymentAuditLog(tmp_path / "deployment_audit.jsonl"),
     )
 
     selection = service.save_selection(
@@ -202,6 +204,9 @@ def test_selection_persistence_create_read_clear(
     assert selection.readiness.deployable is True
     assert selection.selected_at <= datetime.now(tz=UTC)
     assert selection_path.exists()
+    attempts = service.audit_log.get_attempts(model_id=model_id)
+    assert attempts[-1].result == "approved"
+    assert attempts[-1].generation_id == generation_id
 
     reloaded = DeploymentService(
         model_service=model_service,
@@ -212,3 +217,28 @@ def test_selection_persistence_create_read_clear(
     reloaded.clear_selection()
     with pytest.raises(DeploymentSelectionNotFoundError):
         reloaded.get_selection()
+
+
+def test_save_selection_audits_rejected_supporting_model(
+    model_service: ModelService,
+    tmp_path: Path,
+) -> None:
+    """Rejected deployment roots should be captured in the audit log."""
+
+    supporting_model_id = _create_supporting_model(model_service)
+    audit_log = DeploymentAuditLog(tmp_path / "deployment_audit.jsonl")
+    service = DeploymentService(model_service=model_service, audit_log=audit_log)
+
+    with pytest.raises(DeploymentValidationError):
+        service.save_selection(
+            DeploymentValidationRequest(
+                model_id=supporting_model_id,
+                generation_id="unused-generation",
+            ),
+            selected_by="unit-test",
+        )
+
+    attempts = audit_log.get_attempts(model_id=supporting_model_id)
+    assert attempts[-1].result == "rejected"
+    assert attempts[-1].user_id == "unit-test"
+    assert attempts[-1].model_type == "supporting_ml"

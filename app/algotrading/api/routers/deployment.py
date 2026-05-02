@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from algotrading.api.schemas.common import APIResponse
 from algotrading.api.schemas.deployment import (
+    DeployableModel,
     DeploymentCandidate,
     DeploymentReadiness,
     DeploymentSelection,
@@ -48,6 +49,15 @@ def list_candidates(
 
     candidates = service.list_candidates()
     return APIResponse(data=candidates)
+
+
+@router.get("/deployable-models", response_model=APIResponse[list[DeployableModel]])
+def list_deployable_models(
+    service: DeploymentService = Depends(get_deployment_service),
+) -> APIResponse[list[DeployableModel]]:
+    """List trained core RL models allowed through the hard deployment gate."""
+
+    return APIResponse(data=service.list_deployable_models())
 
 
 @router.post("/validate", response_model=APIResponse[DeploymentReadiness])
