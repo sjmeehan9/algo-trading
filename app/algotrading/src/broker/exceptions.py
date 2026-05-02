@@ -140,10 +140,68 @@ class BrokerTimeoutError(BrokerError):
         return f"{self.message} ({context})"
 
 
+@dataclass(kw_only=True)
+class BrokerConfigurationError(BrokerError):
+    """Raised when broker registry configuration cannot be loaded.
+
+    Args:
+        message: Human-readable failure message.
+        config_path: Optional path to the broker configuration file.
+        reason: Optional lower-level error reason.
+        broker_name: Optional broker adapter name.
+    """
+
+    config_path: str | None = None
+    reason: str | None = None
+
+    def __str__(self) -> str:
+        """Return a readable configuration error representation."""
+
+        details: list[str] = []
+        if self.config_path:
+            details.append(f"config_path={self.config_path}")
+        if self.reason:
+            details.append(f"reason={self.reason}")
+        suffix = f" ({', '.join(details)})" if details else ""
+        if self.broker_name:
+            return f"[{self.broker_name}] {self.message}{suffix}"
+        return f"{self.message}{suffix}"
+
+
+@dataclass(kw_only=True)
+class NoBrokerAvailableError(BrokerError):
+    """Raised when no configured broker can be connected.
+
+    Args:
+        message: Human-readable failure message.
+        attempted_brokers: Broker names attempted in priority order.
+        failure_reasons: Per-broker failure summaries safe for logs and UI.
+        broker_name: Optional broker adapter name.
+    """
+
+    attempted_brokers: tuple[str, ...] = ()
+    failure_reasons: tuple[str, ...] = ()
+
+    def __str__(self) -> str:
+        """Return a readable no-broker-available error representation."""
+
+        details: list[str] = []
+        if self.attempted_brokers:
+            details.append(f"attempted={','.join(self.attempted_brokers)}")
+        if self.failure_reasons:
+            details.append(f"failures={'; '.join(self.failure_reasons)}")
+        suffix = f" ({', '.join(details)})" if details else ""
+        if self.broker_name:
+            return f"[{self.broker_name}] {self.message}{suffix}"
+        return f"{self.message}{suffix}"
+
+
 __all__ = [
     "BrokerError",
     "BrokerConnectionError",
+    "BrokerConfigurationError",
     "BrokerDataError",
     "BrokerOrderError",
     "BrokerTimeoutError",
+    "NoBrokerAvailableError",
 ]

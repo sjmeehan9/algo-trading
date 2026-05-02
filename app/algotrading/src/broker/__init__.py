@@ -10,11 +10,14 @@ from algotrading.src.broker.adapter import (
 from algotrading.src.broker.adapters.alpaca import AlpacaAdapter
 from algotrading.src.broker.exceptions import (
     BrokerConnectionError,
+    BrokerConfigurationError,
     BrokerDataError,
     BrokerError,
     BrokerOrderError,
     BrokerTimeoutError,
+    NoBrokerAvailableError,
 )
+from algotrading.src.broker.health import BrokerHealth
 from algotrading.src.broker.ib_adapter import InteractiveBrokersAdapter
 from algotrading.src.broker.ib_converters import (
     bar_from_ib,
@@ -42,6 +45,7 @@ from algotrading.src.broker.models import (
     order_status_from_ib_fields,
     parse_ib_timestamp,
 )
+from algotrading.src.broker.registry import BrokerConfig, BrokerRegistry
 
 ContractList = list[ContractSpec]
 BarSeries = list[BarData]
@@ -56,9 +60,13 @@ __all__ = [
     "BarSeries",
     "BrokerAdapter",
     "BrokerConnectionError",
+    "BrokerConfig",
+    "BrokerConfigurationError",
     "BrokerDataError",
     "BrokerError",
+    "BrokerHealth",
     "BrokerOrderError",
+    "BrokerRegistry",
     "BrokerTimeoutError",
     "ContractLike",
     "ContractList",
@@ -66,6 +74,7 @@ __all__ = [
     "InteractiveBrokersAdapter",
     "DataCallback",
     "InstrumentType",
+    "NoBrokerAvailableError",
     "OrderCallback",
     "OrderLike",
     "OrderSide",

@@ -1,0 +1,24 @@
+# Broker Configuration
+#
+# Credentials stay in environment variables or injected runtime config. This
+# file only selects adapters and non-secret connection defaults.
+
+primary_broker: interactive_brokers
+fallback_brokers:
+  - alpaca
+
+broker_configs:
+  interactive_brokers:
+    paper_trading: true
+
+  alpaca:
+    paper: true
+    data_feed: iex
+
+connection_params:
+  interactive_brokers:
+    host: "127.0.0.1"
+    port: 7497
+    client_id: 1
+
+  alpaca: {}
