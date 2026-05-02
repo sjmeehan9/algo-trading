@@ -9,8 +9,8 @@ from algotrading.src.broker.adapter import (
 )
 from algotrading.src.broker.adapters.alpaca import AlpacaAdapter
 from algotrading.src.broker.exceptions import (
-    BrokerConnectionError,
     BrokerConfigurationError,
+    BrokerConnectionError,
     BrokerDataError,
     BrokerError,
     BrokerOrderError,
