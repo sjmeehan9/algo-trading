@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 from dataclasses import dataclass
 from importlib import resources
 from typing import Any
 
+from algotrading.src.config.settings import Settings
 from jsonschema import Draft202012Validator, ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -56,6 +60,136 @@ def validate_runtime_config(config: dict[str, Any]) -> tuple[bool, list[str]]:
     coerced = _coerce_yaml_dates(config)
     schema = _load_schema("config_schema.json")
     return _validate_with_schema(coerced, schema)
+
+
+def validate_configuration(settings: Settings) -> tuple[bool, list[str]]:
+    """Validate runtime settings for application startup.
+
+    Args:
+        settings: Resolved application settings.
+
+    Returns:
+        Tuple containing validation success and actionable error messages.
+    """
+
+    errors: list[str] = []
+
+    if not settings.api_key.strip():
+        errors.append("ALGOTRADING_API_KEY is required")
+
+    has_ib_config = bool(settings.ib_host.strip() and settings.ib_port > 0)
+    has_alpaca_config = bool(settings.alpaca_api_key and settings.alpaca_secret_key)
+    if not has_ib_config and not has_alpaca_config:
+        errors.append(
+            "At least one broker must be configured: Interactive Brokers host/port "
+            "or Alpaca API credentials"
+        )
+
+    if settings.default_broker == "alpaca" and not has_alpaca_config:
+        errors.append(
+            "Alpaca API credentials are required when ALGOTRADING_DEFAULT_BROKER=alpaca"
+        )
+
+    if settings.is_production():
+        if settings.debug:
+            errors.append("Debug mode must be disabled in production")
+        if len(settings.api_key) < 32:
+            errors.append(
+                "ALGOTRADING_API_KEY must be at least 32 characters in production"
+            )
+        if any("localhost" in origin for origin in settings.cors_origins):
+            logger.warning("Configuration warning: CORS allows localhost in production")
+
+    warnings: list[str] = []
+    if not settings.openai_api_key:
+        warnings.append(
+            "OpenAI API key not set - LLM hyperparameter optimization uses fallback mode"
+        )
+    if not settings.benzinga_api_key and not settings.alphavantage_api_key:
+        warnings.append(
+            "No news provider API keys set - live news sentiment features are disabled"
+        )
+    if settings.news_provider == settings.news_fallback_provider:
+        warnings.append("News provider fallback matches primary provider")
+
+    for warning in warnings:
+        logger.warning("Configuration warning: %s", warning)
+
+    return len(errors) == 0, errors
+
+
+def mask_secret(value: str | None, visible_chars: int = 4) -> str:
+    """Mask a secret value for logs or diagnostics.
+
+    Args:
+        value: Secret value to mask.
+        visible_chars: Number of leading characters to retain for operator
+            recognition.
+
+    Returns:
+        Masked secret string.
+    """
+
+    if not value:
+        return "****"
+    if visible_chars <= 0 or len(value) <= visible_chars:
+        return "****"
+    return f"{value[:visible_chars]}{'*' * (len(value) - visible_chars)}"
+
+
+def log_configuration(settings: Settings) -> None:
+    """Log sanitized configuration values for startup diagnostics.
+
+    Args:
+        settings: Resolved application settings.
+    """
+
+    logger.info(
+        "Configuration loaded",
+        extra={"configuration": configuration_snapshot(settings)},
+    )
+
+
+def configuration_snapshot(settings: Settings) -> dict[str, object]:
+    """Return a sanitized configuration snapshot suitable for logs.
+
+    Args:
+        settings: Resolved application settings.
+
+    Returns:
+        Dictionary containing non-sensitive values and masked secret markers.
+    """
+
+    return {
+        "app_name": settings.app_name,
+        "environment": settings.environment,
+        "debug": settings.debug,
+        "log_level": settings.log_level,
+        "api_host": settings.api_host,
+        "api_port": settings.api_port,
+        "api_key": mask_secret(settings.api_key),
+        "cors_origins": settings.cors_origins,
+        "default_broker": settings.default_broker,
+        "ib_host": settings.ib_host,
+        "ib_port": settings.ib_port,
+        "ib_client_id": settings.ib_client_id,
+        "alpaca_api_key": mask_secret(settings.alpaca_api_key),
+        "alpaca_secret_key": mask_secret(settings.alpaca_secret_key),
+        "alpaca_paper": settings.alpaca_paper,
+        "alpaca_data_feed": settings.alpaca_data_feed,
+        "benzinga_api_key": mask_secret(settings.benzinga_api_key),
+        "alphavantage_api_key": mask_secret(settings.alphavantage_api_key),
+        "news_provider": settings.news_provider,
+        "news_fallback_provider": settings.news_fallback_provider,
+        "openai_api_key": mask_secret(settings.openai_api_key),
+        "openai_model": settings.openai_model,
+        "openai_timeout_seconds": settings.openai_timeout_seconds,
+        "data_path": settings.data_path,
+        "model_path": settings.model_path,
+        "log_path": settings.log_path,
+        "max_position_pct": settings.max_position_pct,
+        "min_confidence": settings.min_confidence,
+    }
 
 
 def _coerce_yaml_dates(data: Any) -> Any:

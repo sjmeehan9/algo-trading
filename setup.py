@@ -27,6 +27,7 @@ setup(
         'uvicorn>=0.29.0',
         'pydantic>=2.7.0',
         'pydantic-settings>=2.2.1',
+        'python-dotenv>=1.0.1',
         'python-multipart>=0.0.9',
         'websockets>=12.0',
         'gymnasium>=0.29.1',

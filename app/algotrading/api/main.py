@@ -22,6 +22,7 @@ from algotrading.api.routers import (
 from algotrading.api.schemas import APIError
 from algotrading.api.websocket import WebSocketManager
 from algotrading.src.broker import BrokerRegistry
+from algotrading.src.config.validation import log_configuration, validate_configuration
 from algotrading.src.monitoring import (
     HealthChecker,
     HealthStatus,
@@ -63,6 +64,13 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
 
     resolved_config = config or APIConfig()
     setup_structured_logging(level=resolved_config.log_level)
+
+    is_valid, configuration_errors = validate_configuration(resolved_config)
+    if not is_valid:
+        for error in configuration_errors:
+            logger.error("Configuration error: %s", error)
+        raise RuntimeError("Invalid configuration: " + "; ".join(configuration_errors))
+    log_configuration(resolved_config)
 
     app = FastAPI(
         title="Algo-Trading Model API",

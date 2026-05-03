@@ -19,8 +19,11 @@ from algotrading.src.data_pipeline.sources.news_source import NewsDataSource
 from algotrading.src.data_pipeline.sources.news_utils import resolve_env_placeholder
 
 _ENV_FALLBACKS = {
-    "benzinga": "BENZINGA_API_KEY",
-    "alphavantage": "ALPHAVANTAGE_API_KEY",
+    "benzinga": ("ALGOTRADING_BENZINGA_API_KEY", "BENZINGA_API_KEY"),
+    "alphavantage": (
+        "ALGOTRADING_ALPHAVANTAGE_API_KEY",
+        "ALPHAVANTAGE_API_KEY",
+    ),
 }
 
 
@@ -160,19 +163,20 @@ class NewsSourceFactory:
             if resolved:
                 return resolved
 
-        env_name = _ENV_FALLBACKS.get(provider_name)
-        if env_name is None:
+        env_names = _ENV_FALLBACKS.get(provider_name)
+        if env_names is None:
             raise DataValidationError(
                 f"No API key resolution strategy for provider '{provider_name}'"
             )
 
-        env_value = os.getenv(env_name)
-        if env_value is not None and env_value.strip():
-            return env_value.strip()
+        for env_name in env_names:
+            env_value = os.getenv(env_name)
+            if env_value is not None and env_value.strip():
+                return env_value.strip()
 
         raise DataSourceConnectionError(
             f"Missing API key for provider '{provider_name}'. "
-            f"Set {env_name} or populate news_credentials.yml."
+            f"Set one of {', '.join(env_names)} or populate news_credentials.yml."
         )
 
     @staticmethod

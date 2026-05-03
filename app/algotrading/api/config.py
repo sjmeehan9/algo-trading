@@ -2,102 +2,47 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
-from pydantic import AliasChoices, Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from algotrading.src.config.settings import Settings
 
 
-class APIConfig(BaseSettings):
-    """Runtime configuration for the FastAPI service.
+class APIConfig(Settings):
+    """Backward-compatible API configuration model.
 
-    Environment variables use the ``ALGOTRADING_`` prefix.
+    The API now uses the shared application ``Settings`` model while retaining
+    the ``APIConfig`` import path used by Phase 5 services and tests.
     """
 
-    api_host: str = "0.0.0.0"
-    api_port: int = 8000
-    api_key: str = Field(..., min_length=1)
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
-    debug: bool = False
-    log_level: str = "INFO"
-    openai_api_key: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("ALGOTRADING_OPENAI_API_KEY", "OPENAI_API_KEY"),
-    )
-    openai_model: str = "gpt-4o-mini"
-    openai_timeout_seconds: float = Field(default=30.0, gt=0)
 
-    model_config = SettingsConfigDict(
-        env_prefix="ALGOTRADING_",
-        extra="ignore",
-        enable_decoding=False,
-        populate_by_name=True,
-    )
-
-    @field_validator("api_key")
-    @classmethod
-    def validate_api_key(cls, value: str) -> str:
-        """Ensure the configured API key is not blank."""
-
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("ALGOTRADING_API_KEY must not be empty.")
-        return normalized
-
-    @field_validator("openai_api_key")
-    @classmethod
-    def normalize_openai_api_key(cls, value: str | None) -> str | None:
-        """Normalize optional OpenAI API keys without exposing their contents."""
-
-        if value is None:
-            return None
-        normalized = value.strip()
-        return normalized or None
-
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, value: object) -> object:
-        """Support list, JSON string list, or comma-delimited CORS origins."""
-
-        if isinstance(value, str):
-            stripped = value.strip()
-            if not stripped:
-                return []
-
-            if stripped.startswith("["):
-                parsed = json.loads(stripped)
-                if not isinstance(parsed, list):
-                    raise ValueError(
-                        "ALGOTRADING_CORS_ORIGINS JSON must decode to a list."
-                    )
-                return [str(origin).strip() for origin in parsed if str(origin).strip()]
-
-            return [origin.strip() for origin in stripped.split(",") if origin.strip()]
-
-        if isinstance(value, list):
-            return [str(origin).strip() for origin in value if str(origin).strip()]
-
-        return value
-
-
-def as_public_config(config: APIConfig) -> dict[str, Any]:
+def as_public_config(config: Settings) -> dict[str, Any]:
     """Return non-sensitive configuration fields for diagnostics.
 
     Args:
-        config: Resolved API configuration.
+        config: Resolved application configuration.
 
     Returns:
         Dictionary containing non-secret values safe for logs.
     """
 
     return {
+        "app_name": config.app_name,
+        "environment": config.environment,
         "api_host": config.api_host,
         "api_port": config.api_port,
         "cors_origins": config.cors_origins,
         "debug": config.debug,
         "log_level": config.log_level,
+        "default_broker": config.default_broker,
+        "alpaca_configured": bool(config.alpaca_api_key and config.alpaca_secret_key),
+        "benzinga_configured": bool(config.benzinga_api_key),
+        "alphavantage_configured": bool(config.alphavantage_api_key),
+        "news_provider": config.news_provider,
+        "news_fallback_provider": config.news_fallback_provider,
         "openai_configured": bool(config.openai_api_key),
         "openai_model": config.openai_model,
         "openai_timeout_seconds": config.openai_timeout_seconds,
     }
+
+
+__all__ = ["APIConfig", "as_public_config"]
