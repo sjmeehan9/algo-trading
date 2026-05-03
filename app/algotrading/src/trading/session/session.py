@@ -22,6 +22,7 @@ from algotrading.src.broker import (
     OrderType,
     PositionInfo,
 )
+from algotrading.src.monitoring import TradingMetrics
 from algotrading.src.trading.inference import TradingDecision
 from algotrading.src.trading.session.exceptions import InvalidSessionStateError
 from algotrading.src.trading.session.persistence import SessionPersistence
@@ -144,6 +145,7 @@ class TradingSession:
         created_at: datetime | None = None,
         started_at: datetime | None = None,
         stopped_at: datetime | None = None,
+        trading_metrics: TradingMetrics | None = None,
     ) -> None:
         """Initialize a trading session.
 
@@ -158,6 +160,7 @@ class TradingSession:
             created_at: Original creation timestamp for recovered sessions.
             started_at: Original start timestamp for recovered sessions.
             stopped_at: Original stop timestamp for recovered sessions.
+            trading_metrics: Optional metrics recorder for session events.
         """
 
         self.session_id = session_id.strip()
@@ -170,6 +173,7 @@ class TradingSession:
         self.persistence = persistence
         self.status = status
         self.state = state or SessionState(session_id=self.session_id)
+        self.trading_metrics = trading_metrics or TradingMetrics()
         self.created_at = _ensure_aware(created_at or datetime.now(tz=UTC))
         self.started_at = _ensure_optional_aware(started_at)
         self.stopped_at = _ensure_optional_aware(stopped_at)
@@ -296,6 +300,12 @@ class TradingSession:
         try:
             decision = await self.inference_pipeline.process_market_data(bar_data)
             self.state.record_decision(decision)
+            self.trading_metrics.record_decision(
+                self.session_id,
+                decision.action,
+                decision.confidence,
+                decision.latency_ms,
+            )
             if decision.should_execute(min_confidence=self._min_confidence()):
                 await self._execute_decision(decision)
             if self.state.decisions_count % self._persist_every_decisions == 0:
@@ -361,6 +371,18 @@ class TradingSession:
     def _hydrate_positions_from_broker(self) -> None:
         positions = self.broker.get_positions()
         self.state.sync_positions(positions)
+        unrealized_pnl = 0.0
+        for position in positions:
+            symbol = position.contract.symbol
+            market_value = float(position.market_value or 0.0)
+            unrealized_pnl += float(position.unrealized_pnl or 0.0)
+            self.trading_metrics.update_position(
+                self.session_id,
+                symbol,
+                float(position.quantity),
+                market_value,
+            )
+        self.trading_metrics.update_pnl(self.session_id, 0.0, unrealized_pnl)
 
     def _ensure_market_data_subscriptions(self) -> None:
         if self._data_subscription_ids:
@@ -407,9 +429,33 @@ class TradingSession:
 
     def _on_order_update(self, order_status: OrderStatus) -> None:
         self.state.update_order_status(order_status.order_id, order_status.status)
+        self.trading_metrics.record_order_status(self.session_id, order_status.status)
+        order = self.state.orders.get(order_status.order_id)
+        if order is None or order_status.status != "FILLED":
+            return
+        fill_price = float(order_status.average_fill_price or order.price)
+        slippage = fill_price - order.price
+        self.trading_metrics.record_fill(
+            self.session_id,
+            order.action,
+            float(order_status.filled_quantity),
+            fill_price,
+            slippage,
+        )
 
     def _on_position_update(self, position: PositionInfo) -> None:
         self.state.set_position(position.contract.symbol, float(position.quantity))
+        self.trading_metrics.update_position(
+            self.session_id,
+            position.contract.symbol,
+            float(position.quantity),
+            float(position.market_value or 0.0),
+        )
+        self.trading_metrics.update_pnl(
+            self.session_id,
+            0.0,
+            float(position.unrealized_pnl or 0.0),
+        )
 
     async def _execute_decision(self, decision: TradingDecision) -> None:
         symbol = self._decision_symbol(decision)
@@ -435,6 +481,18 @@ class TradingSession:
                 action="BUY",
                 quantity=quantity,
                 decision=decision,
+            )
+            self.trading_metrics.record_order(
+                self.session_id,
+                "BUY",
+                quantity,
+                decision.market_price,
+            )
+            self.trading_metrics.update_position(
+                self.session_id,
+                symbol,
+                self.state.get_position(symbol),
+                self.state.get_position(symbol) * decision.market_price,
             )
             await self._persist_state()
             return
@@ -462,6 +520,18 @@ class TradingSession:
                 action="SELL",
                 quantity=quantity,
                 decision=decision,
+            )
+            self.trading_metrics.record_order(
+                self.session_id,
+                "SELL",
+                quantity,
+                decision.market_price,
+            )
+            self.trading_metrics.update_position(
+                self.session_id,
+                symbol,
+                self.state.get_position(symbol),
+                self.state.get_position(symbol) * decision.market_price,
             )
             await self._persist_state()
 
@@ -493,6 +563,18 @@ class TradingSession:
                 action=action,
                 quantity=abs(quantity),
                 decision=decision,
+            )
+            self.trading_metrics.record_order(
+                self.session_id,
+                action,
+                abs(quantity),
+                decision.market_price,
+            )
+            self.trading_metrics.update_position(
+                self.session_id,
+                symbol,
+                self.state.get_position(symbol),
+                self.state.get_position(symbol) * decision.market_price,
             )
 
     def _symbol_to_contract(self, symbol: str) -> ContractSpec:

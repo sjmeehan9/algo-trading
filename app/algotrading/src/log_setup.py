@@ -1,31 +1,20 @@
-import json
 import logging
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from algotrading.src.monitoring import StructuredLogFormatter
 
-class JsonLogFormatter(logging.Formatter):
+
+class JsonLogFormatter(StructuredLogFormatter):
     """JSON formatter for structured logging output."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        payload = {
-            "timestamp": self.formatTime(record, self.datefmt),
-            "level": record.levelname,
-            "module": record.name,
-            "message": record.getMessage(),
-            "thread": record.threadName,
-            "filename": record.filename,
-            "line": record.lineno,
-        }
-        return json.dumps(payload)
 
 
 def setup_logger(
     path: str,
     print_logs: bool = False,
     log_level: int | str = logging.INFO,
-    use_json: bool = False,
+    use_json: bool = True,
     max_bytes: int = 5 * 1024 * 1024,
     backup_count: int = 5,
 ) -> logging.Logger:

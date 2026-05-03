@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from algotrading.src.broker import BarData, BrokerRegistry, ContractSpec, OrderSpec
+from algotrading.src.monitoring import MetricsCollector
 from algotrading.src.trading.inference import TradingDecision
 from algotrading.src.trading.session import (
     SessionConfig,
@@ -150,6 +151,7 @@ def _manager(
 async def test_session_lifecycle_executes_buy_decision(tmp_path: Path) -> None:
     """A running session should subscribe, infer, place orders, and stop."""
 
+    MetricsCollector().reset()
     manager, brokers, validator = _manager(tmp_path)
     session = await manager.create_session(
         model_id="core-1",
@@ -169,6 +171,17 @@ async def test_session_lifecycle_executes_buy_decision(tmp_path: Path) -> None:
     assert session.state.decisions_count == 1
     assert session.state.get_position("AAPL") == 20.0
     assert brokers[0].orders[0][1].side.value == "BUY"
+    metrics = MetricsCollector().get_all()
+    assert (
+        metrics["counters"][
+            f"decisions_total{{action=BUY,session={session.session_id}}}"
+        ]
+        == 1
+    )
+    assert (
+        metrics["counters"][f"orders_total{{action=BUY,session={session.session_id}}}"]
+        == 1
+    )
 
     await manager.pause_session(session.session_id)
     assert session.status == SessionStatus.PAUSED

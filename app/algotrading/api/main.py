@@ -21,10 +21,17 @@ from algotrading.api.routers import (
 )
 from algotrading.api.schemas import APIError
 from algotrading.api.websocket import WebSocketManager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, status
+from algotrading.src.broker import BrokerRegistry
+from algotrading.src.monitoring import (
+    HealthChecker,
+    HealthStatus,
+    MetricsCollector,
+    setup_structured_logging,
+)
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
@@ -55,6 +62,7 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
     """
 
     resolved_config = config or APIConfig()
+    setup_structured_logging(level=resolved_config.log_level)
 
     app = FastAPI(
         title="Algo-Trading Model API",
@@ -73,6 +81,7 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         "/docs/oauth2-redirect",
         "/redoc",
         "/openapi.json",
+        "/metrics",
     )
 
     app.add_middleware(
@@ -152,14 +161,47 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         if session_manager is not None:
             await session_manager.shutdown(close_positions=False)
 
-    @app.get("/health", tags=["system"])
-    async def health_check() -> dict[str, str]:
-        """Return service health state and timestamp."""
+    def get_health_checker() -> HealthChecker:
+        """Return the configured health checker for this app instance."""
 
-        return {
-            "status": "healthy",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
+        checker = getattr(app.state, "health_checker", None)
+        if checker is None:
+            checker = HealthChecker(
+                broker_registry=BrokerRegistry(),
+                session_manager_provider=lambda: getattr(
+                    app.state,
+                    "trading_session_manager",
+                    None,
+                ),
+            )
+            app.state.health_checker = checker
+        return checker
+
+    @app.get("/health", tags=["system"])
+    async def health_check(request: Request) -> JSONResponse:
+        """Return detailed service health state and component statuses."""
+
+        del request
+        result = await get_health_checker().check_all()
+        status_code = (
+            503 if result.get("status") == HealthStatus.UNHEALTHY.value else 200
+        )
+        return JSONResponse(content=result, status_code=status_code)
+
+    @app.get("/metrics", tags=["system"])
+    async def metrics() -> PlainTextResponse:
+        """Return Prometheus-compatible application metrics."""
+
+        return PlainTextResponse(
+            content=MetricsCollector().get_prometheus_format(),
+            media_type="text/plain; version=0.0.4",
+        )
+
+    @app.get("/metrics/json", tags=["system"])
+    async def metrics_json() -> dict[str, dict[str, object]]:
+        """Return application metrics in JSON format for diagnostics."""
+
+        return MetricsCollector().get_all()
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket) -> None:
