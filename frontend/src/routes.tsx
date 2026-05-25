@@ -9,6 +9,7 @@ const ModelConfigPage = lazy(() => import('./pages/ModelConfig'));
 const TrainingPage = lazy(() => import('./pages/Training'));
 const BacktestingPage = lazy(() => import('./pages/Backtesting'));
 const DeploymentPage = lazy(() => import('./pages/Deployment'));
+const TradingPage = lazy(() => import('./pages/Trading'));
 
 /** Browser router covering all planned model lifecycle pages. */
 export const router = createBrowserRouter([
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
       { path: 'training', element: <TrainingPage /> },
       { path: 'backtesting', element: <BacktestingPage /> },
       { path: 'deployment', element: <DeploymentPage /> },
+      { path: 'trading', element: <TradingPage /> },
     ],
   },
 ]);

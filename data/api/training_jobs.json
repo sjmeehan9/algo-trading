@@ -1,0 +1,22 @@
+{
+  "jobs": [
+    {
+      "completed_at": null,
+      "created_at": "2026-05-08T20:53:41.551846Z",
+      "current_metrics": {},
+      "current_timestep": 0,
+      "data_config": {},
+      "description": "test",
+      "error_message": null,
+      "generation_id": null,
+      "job_id": "job-e0e7e56b90a6",
+      "model_id": "core-rl-d4153568",
+      "progress_percent": 0.0,
+      "started_at": null,
+      "status": "queued",
+      "total_timesteps": 10000,
+      "training_config": {}
+    }
+  ],
+  "saved_at": "2026-05-08T20:53:41.555201+00:00"
+}

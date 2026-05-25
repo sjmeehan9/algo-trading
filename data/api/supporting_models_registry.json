@@ -1,0 +1,41 @@
+{
+  "models": [
+    {
+      "config": {
+        "config": {
+          "algorithm": "random_forest",
+          "created_at": "2026-05-08T20:38:28.251988+00:00",
+          "description": null,
+          "hyperparameters": {
+            "max_depth": 10,
+            "n_estimators": 100
+          },
+          "input_data_types": [
+            "news_text"
+          ],
+          "input_frequency": "1m",
+          "name": "news sentiment",
+          "trainer_type": "sklearn",
+          "updated_at": "2026-05-08T20:38:28.251988+00:00"
+        },
+        "description": null,
+        "input_data_types": [
+          "NEWS_TEXT"
+        ],
+        "input_frequency": "MINUTE_1",
+        "model_id": "supporting-ml-3a175f6e",
+        "model_path": null,
+        "model_type": "ml",
+        "signal_type": "sentiment",
+        "trainer_class": "algotrading.src.models.supporting.sentiment.news_sentiment.NewsSentimentTrainer"
+      },
+      "error_message": null,
+      "inference_count": 0,
+      "last_inference_time": null,
+      "loaded_at": null,
+      "registered_at": "2026-05-08T20:38:28.254285+00:00",
+      "state": "registered"
+    }
+  ],
+  "saved_at": "2026-05-08T20:38:28.255079+00:00"
+}

@@ -1,11 +1,10 @@
 import { Activity, BarChart3, BrainCircuit, CheckCircle2, Play, Rocket } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
-const summaryItems = [
-  { label: 'Model configurations', value: '0', accent: 'text-action', icon: BrainCircuit },
-  { label: 'Training jobs', value: '0', accent: 'text-success', icon: Activity },
-  { label: 'Backtests', value: '0', accent: 'text-caution', icon: BarChart3 },
-] as const;
+import { backtestingApi } from '../api/backtesting';
+import { modelsApi } from '../api/models';
+import { trainingApi } from '../api/training';
 
 const workflowItems = [
   { title: 'Configure', target: '/models/new', icon: BrainCircuit },
@@ -16,6 +15,40 @@ const workflowItems = [
 
 /** Operational dashboard for the model-building frontend. */
 export default function Dashboard(): JSX.Element {
+  const modelsQuery = useQuery({
+    queryKey: ['dashboard', 'models-summary'],
+    queryFn: () => modelsApi.list({ pageSize: 1 }),
+  });
+  const trainingJobsQuery = useQuery({
+    queryKey: ['dashboard', 'training-jobs-summary'],
+    queryFn: () => trainingApi.listJobs(),
+  });
+  const backtestsQuery = useQuery({
+    queryKey: ['dashboard', 'backtests-summary'],
+    queryFn: () => backtestingApi.list({ pageSize: 1 }),
+  });
+
+  const summaryItems = [
+    {
+      label: 'Model configurations',
+      value: modelsQuery.isLoading ? '-' : String(modelsQuery.data?.total ?? 0),
+      accent: 'text-action',
+      icon: BrainCircuit,
+    },
+    {
+      label: 'Training jobs',
+      value: trainingJobsQuery.isLoading ? '-' : String(trainingJobsQuery.data?.length ?? 0),
+      accent: 'text-success',
+      icon: Activity,
+    },
+    {
+      label: 'Backtests',
+      value: backtestsQuery.isLoading ? '-' : String(backtestsQuery.data?.total ?? 0),
+      accent: 'text-caution',
+      icon: BarChart3,
+    },
+  ] as const;
+
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <section className="grid gap-4 md:grid-cols-3">

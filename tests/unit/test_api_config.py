@@ -17,7 +17,7 @@ def test_api_config_loads_from_environment(monkeypatch: pytest.MonkeyPatch) -> N
         "http://localhost:3000,http://127.0.0.1:5173",
     )
 
-    config = APIConfig()
+    config = APIConfig(_env_file=None)
 
     assert config.api_host == "0.0.0.0"
     assert config.api_port == 9001
@@ -36,7 +36,7 @@ def test_api_config_supports_json_list_for_cors(
         '["http://localhost:3000", "https://frontend.example.com"]',
     )
 
-    config = APIConfig()
+    config = APIConfig(_env_file=None)
 
     assert config.cors_origins == [
         "http://localhost:3000",
@@ -53,7 +53,7 @@ def test_api_config_reads_openai_key_alias(
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
     monkeypatch.setenv("ALGOTRADING_OPENAI_MODEL", "gpt-test")
 
-    config = APIConfig()
+    config = APIConfig(_env_file=None)
 
     assert config.openai_api_key == "openai-key"
     assert config.openai_model == "gpt-test"
@@ -67,4 +67,4 @@ def test_api_config_requires_non_empty_api_key(
     monkeypatch.delenv("ALGOTRADING_API_KEY", raising=False)
 
     with pytest.raises(ValidationError):
-        APIConfig()
+        APIConfig(_env_file=None)

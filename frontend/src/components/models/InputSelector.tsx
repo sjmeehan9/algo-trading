@@ -44,6 +44,9 @@ const toStrategyInput = (strategy: StrategyInfo): SelectableInput => ({
   badge: `Strategy ${strategy.version}`,
 });
 
+const supportingModelUnavailableReason = (state: string): string =>
+  `Unavailable: train or load this supporting model before selecting it. Current state: ${state}.`;
+
 const loadInputs = async (type: InputSelectorType): Promise<SelectableInput[]> => {
   if (type === 'strategies') {
     const strategies = await strategiesApi.list();
@@ -110,6 +113,10 @@ export default function InputSelector({
         const isSelected = selected.includes(item.id);
         const isUnavailableModel = type === 'models' && item.state.toLowerCase() !== 'ready';
         const isDisabled = isUnavailableModel && !isSelected;
+        const unavailableReason = isUnavailableModel
+          ? supportingModelUnavailableReason(item.state)
+          : null;
+        const unavailableReasonId = `${type}-${item.id}-unavailable-reason`;
 
         return (
           <label
@@ -124,6 +131,7 @@ export default function InputSelector({
               type="checkbox"
               checked={isSelected}
               disabled={isDisabled}
+              aria-describedby={unavailableReason ? unavailableReasonId : undefined}
               onChange={() => handleToggle(item.id)}
               className="mt-1 h-4 w-4 rounded border-stone-300 text-action"
             />
@@ -142,8 +150,10 @@ export default function InputSelector({
                   {item.description}
                 </span>
               )}
-              {isUnavailableModel && (
-                <span className="mt-1 block text-xs text-caution">State: {item.state}</span>
+              {unavailableReason && (
+                <span id={unavailableReasonId} className="mt-1 block text-xs text-caution">
+                  {unavailableReason}
+                </span>
               )}
             </span>
           </label>

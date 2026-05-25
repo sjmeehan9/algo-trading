@@ -180,6 +180,25 @@ describe('ModelConfig', () => {
     expect(payload.training_data_config).toMatchObject({ symbols: ['SPY'] });
   });
 
+  it('explains why unready supporting model inputs cannot be selected', async () => {
+    vi.mocked(modelsApi.list).mockImplementation(async (params) => {
+      if (params?.modelType === 'supporting_ml') {
+        return createPaginated([{ ...supportingModel, state: 'registered' }]);
+      }
+      return createPaginated<ModelConfigResponse>([]);
+    });
+
+    renderModelConfig('/models/new');
+
+    const checkbox = await screen.findByRole('checkbox', { name: /FinBERT Sentiment/ });
+    expect(checkbox).toBeDisabled();
+    expect(
+      screen.getByText(
+        'Unavailable: train or load this supporting model before selecting it. Current state: registered.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('loads an existing model and submits updates', async () => {
     const user = userEvent.setup();
     renderModelConfig('/models/core-rl-1');

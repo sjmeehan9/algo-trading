@@ -1,0 +1,43 @@
+{
+  "models": [
+    {
+      "algorithm": "ppo",
+      "created_at": "2026-05-08T20:31:26.457817+00:00",
+      "description": "test",
+      "environment_config": {
+        "action_space": "discrete",
+        "allow_short_selling": false,
+        "initial_cash": 100000,
+        "max_position_size": 1,
+        "observation_window": 60,
+        "transaction_cost_bps": 1
+      },
+      "hyperparameters": {
+        "batch_size": 64,
+        "clip_range": 0.2,
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "n_epochs": 10,
+        "n_steps": 2048,
+        "total_timesteps": 4096
+      },
+      "model_id": "core-rl-d4153568",
+      "name": "PPO",
+      "reward_function": "profit_seeker",
+      "state": "configured",
+      "strategy_ids": [],
+      "supporting_model_ids": [],
+      "trainer_type": "stable_baselines3",
+      "training_data_config": {
+        "data_frequency": "1m",
+        "end_date": "2026-04-25",
+        "start_date": "2026-04-21",
+        "symbols": [
+          "SPY"
+        ]
+      },
+      "updated_at": "2026-05-08T20:31:26.457817+00:00"
+    }
+  ],
+  "saved_at": "2026-05-08T20:31:26.458052+00:00"
+}

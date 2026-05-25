@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Activity, BarChart3, BrainCircuit, Home, Rocket, X } from 'lucide-react';
+import { Activity, BarChart3, BrainCircuit, Home, Radio, Rocket, X } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 interface SidebarProps {
@@ -13,6 +13,7 @@ const navItems = [
   { path: '/training', label: 'Training', icon: Activity },
   { path: '/backtesting', label: 'Backtesting', icon: BarChart3 },
   { path: '/deployment', label: 'Deployment', icon: Rocket },
+  { path: '/trading', label: 'Trading', icon: Radio },
 ] as const;
 
 /** Responsive application navigation sidebar. */

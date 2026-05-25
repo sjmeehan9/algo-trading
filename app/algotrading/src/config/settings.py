@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=(".env/.env.local",),
+        env_file=(".env", ".env/.env.local"),
         env_file_encoding="utf-8",
         env_prefix="ALGOTRADING_",
         case_sensitive=False,

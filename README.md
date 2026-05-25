@@ -56,6 +56,22 @@ your paper or cash account
 
 **Task 4** - Backtest a trained model or strategy using the saved data
 
+## Quick Start (manual install)
+
+The supported local deployment model uses a Python virtual environment for the backend and a pnpm-powered Vite dev server for the frontend.
+
+1. Clone the repository.
+1. Navigate to the application directory: `cd algo-trading`.
+1. Install backend and frontend dependencies: `make install`.
+1. Create runtime configuration from the template: `cp .env.example .env`, then set `ALGOTRADING_API_KEY` and any broker/API credentials needed for your workflow.
+1. If the frontend is run from a browser, copy `frontend/.env.example` to `frontend/.env` and set `VITE_API_KEY` to the same value as `ALGOTRADING_API_KEY`.
+1. Validate configuration before launch: `make validate-config`.
+1. Start the API in one terminal: `make run-api`.
+1. Start the frontend in another terminal: `make run-frontend`.
+1. Open the frontend URL reported by Vite, usually `http://localhost:3000`, and confirm `http://localhost:8000/health` responds.
+
+Useful targets: `make help`, `make test`, and `make stop`.
+
 ## Installation
 
 1. Clone the repository
