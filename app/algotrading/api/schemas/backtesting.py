@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, datetime
 from enum import Enum
 
+from algotrading.api.schemas.data_sources import (
+    TrainingDataRequest,
+    normalize_backtest_data_request,
+)
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -125,6 +130,22 @@ class BacktestComparisonRequest(BaseModel):
     backtest_ids: list[str] = Field(min_length=2)
 
 
+def build_backtest_data_request(
+    request: BacktestRequest,
+    model_data_config: Mapping[str, object] | None,
+    overrides: Mapping[str, object] | None = None,
+) -> TrainingDataRequest:
+    """Build the canonical data request for a backtest execution."""
+
+    return normalize_backtest_data_request(
+        model_data_config,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        symbols=request.symbols,
+        overrides=overrides,
+    )
+
+
 __all__ = [
     "BacktestStatus",
     "TradeAction",
@@ -135,4 +156,5 @@ __all__ = [
     "BacktestResult",
     "BacktestComparison",
     "BacktestComparisonRequest",
+    "build_backtest_data_request",
 ]

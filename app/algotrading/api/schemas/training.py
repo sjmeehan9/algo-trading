@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from algotrading.api.schemas.data_sources import validate_data_config_payload
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class TrainingJobStatus(str, Enum):
@@ -42,6 +43,13 @@ class TrainingJobCreate(BaseModel):
     data_config: dict[str, Any] = Field(default_factory=dict)
     total_timesteps: int | None = Field(default=None, ge=1)
     description: str | None = None
+
+    @field_validator("data_config")
+    @classmethod
+    def _validate_data_config(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Validate loose job data-source overrides when present."""
+
+        return validate_data_config_payload(value, require_complete=False)
 
     @model_validator(mode="after")
     def _validate_payload(self) -> "TrainingJobCreate":

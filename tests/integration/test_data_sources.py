@@ -4,16 +4,37 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
 import pytest
+from algotrading.api.schemas.backtesting import (
+    BacktestRequest,
+    build_backtest_data_request,
+)
+from algotrading.api.schemas.data_sources import (
+    CachePolicy,
+    MarketDataProvider,
+    NewsDataProvider,
+    normalize_training_data_request,
+)
 from algotrading.src.broker import BarData, InteractiveBrokersAdapter
 from algotrading.src.data_pipeline.sources import BrokerDataSource, FileSource
 from algotrading.src.data_pipeline.sources.exceptions import DataValidationError
-from algotrading.src.data_pipeline.types import DataRecord, DataType
+from algotrading.src.data_pipeline.storage import (
+    LocalDataCacheMissError,
+    LocalDataStore,
+)
+from algotrading.src.data_pipeline.storage.local_store import MARKET_COLUMNS
+from algotrading.src.data_pipeline.types import (
+    DataBatch,
+    DataFrequency,
+    DataRecord,
+    DataType,
+    NewsRecord,
+)
 
 from tests.mocks import MockBrokerAdapter
 
@@ -96,6 +117,165 @@ def test_file_source_validation_errors(tmp_path: Path) -> None:
             start=datetime(2024, 1, 2, 9, 30, tzinfo=ZoneInfo("US/Eastern")),
             end=datetime(2024, 1, 2, 16, 0, tzinfo=ZoneInfo("US/Eastern")),
         )
+
+
+def test_canonical_data_request_and_local_store_round_trip(tmp_path: Path) -> None:
+    """Normalize data-source configs and round-trip canonical local data."""
+
+    start = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)
+    end = start + timedelta(minutes=1)
+    raw_path = tmp_path / "raw" / "aapl.csv"
+    model_data_config: dict[str, object] = {
+        "symbols": [" aapl "],
+        "start_time": start.isoformat(),
+        "end_time": end.isoformat(),
+        "data_frequency": "1m",
+        "market": {
+            "provider": "file",
+            "symbol_files": {"aapl": str(raw_path)},
+        },
+        "news": {
+            "enabled": True,
+            "provider": "mock",
+            "include_body": True,
+            "limit": 25,
+        },
+    }
+
+    request = normalize_training_data_request(
+        model_data_config,
+        {"cache_policy": "refresh"},
+    )
+
+    assert request.symbols == ["AAPL"]
+    assert request.frequency == DataFrequency.MINUTE_1
+    assert request.cache_policy == CachePolicy.REFRESH
+    assert request.market_source.provider == MarketDataProvider.FILE
+    assert request.market_source.explicit_files == {"AAPL": str(raw_path)}
+    assert request.news_source.provider == NewsDataProvider.MOCK
+    assert request.news_source.enabled is True
+
+    backtest_request = BacktestRequest(
+        model_id="model-1",
+        generation_id="generation-1",
+        start_date=date(2024, 1, 5),
+        end_date=date(2024, 1, 6),
+        symbols=["msft"],
+    )
+    backtest_data_request = build_backtest_data_request(
+        backtest_request,
+        model_data_config,
+    )
+
+    assert backtest_data_request.symbols == ["MSFT"]
+    assert backtest_data_request.start_time.date() == backtest_request.start_date
+    assert backtest_data_request.end_time.date() == backtest_request.end_date
+    assert backtest_data_request.market_source.provider == MarketDataProvider.FILE
+    assert backtest_data_request.news_source.provider == NewsDataProvider.MOCK
+
+    store = LocalDataStore(root=tmp_path / "sourced")
+    batch = DataBatch(
+        records=[
+            DataRecord(
+                timestamp=start,
+                data_type=DataType.MARKET_BAR,
+                symbol="AAPL",
+                payload={
+                    "open": 190.0,
+                    "high": 191.5,
+                    "low": 189.5,
+                    "close": 191.0,
+                    "volume": 1000,
+                    "vwap": 190.75,
+                    "trade_count": 12,
+                },
+                source_id="file:aapl",
+                frequency=DataFrequency.MINUTE_1,
+            ),
+            DataRecord(
+                timestamp=end,
+                data_type=DataType.MARKET_BAR,
+                symbol="AAPL",
+                payload={
+                    "open": 191.0,
+                    "high": 192.0,
+                    "low": 190.8,
+                    "close": 191.6,
+                    "volume": 1200,
+                    "vwap": 191.4,
+                    "trade_count": 15,
+                },
+                source_id="file:aapl",
+                frequency=DataFrequency.MINUTE_1,
+            ),
+        ],
+        start_time=start,
+        end_time=end,
+        data_type=DataType.MARKET_BAR,
+        symbol="AAPL",
+    )
+
+    market_manifest = store.write_market_batch(
+        batch,
+        provider=request.market_source.provider,
+        frequency=request.frequency,
+        requested_start=request.start_time,
+        requested_end=request.end_time,
+        cache_policy=request.cache_policy,
+        source_file_paths=[raw_path],
+    )
+    market_path = tmp_path / "sourced" / "market" / "file" / "AAPL" / "MINUTE_1"
+
+    assert market_manifest.provider == "file"
+    assert market_manifest.record_count == 2
+    assert (market_path / "manifest.json").exists()
+    assert (market_path / "market.csv").read_text(encoding="utf-8").splitlines()[
+        0
+    ].split(",") == list(MARKET_COLUMNS)
+
+    loaded_market = store.find_market_data(request)
+
+    assert loaded_market["AAPL"].manifest.record_count == 2
+    assert loaded_market["AAPL"].batch.records[-1].payload["close"] == 191.6
+    assert loaded_market["AAPL"].data_path == market_path / "market.csv"
+
+    news_record = NewsRecord(
+        timestamp=start + timedelta(seconds=30),
+        headline="Apple shares move after product update",
+        body="Apple shares traded higher after a product update.",
+        source="mock",
+        symbols=["AAPL"],
+        categories=["equities"],
+        sentiment_score=0.35,
+        url="https://example.test/aapl",
+        news_id="mock-aapl-1",
+    )
+    news_manifest = store.write_news_records(
+        [news_record],
+        provider=request.news_source.provider,
+        symbol="aapl",
+        requested_start=request.start_time,
+        requested_end=request.end_time,
+        cache_policy=request.cache_policy,
+    )
+    news_path = tmp_path / "sourced" / "news" / "mock" / "AAPL"
+
+    assert news_manifest.provider == "mock"
+    assert news_manifest.record_count == 1
+    assert (news_path / "manifest.json").exists()
+    assert (news_path / "news.jsonl").exists()
+
+    loaded_news = store.find_news_data(request)
+
+    assert loaded_news["AAPL"].records[0].headline == news_record.headline
+    assert loaded_news["AAPL"].data_path == news_path / "news.jsonl"
+
+    outside_request = normalize_training_data_request(
+        model_data_config,
+        {"end_time": (end + timedelta(minutes=5)).isoformat()},
+    )
+    with pytest.raises(LocalDataCacheMissError, match="does not cover"):
+        store.find_market_data(outside_request)
 
 
 @pytest.mark.requires_ib

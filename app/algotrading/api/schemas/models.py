@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
+from algotrading.api.schemas.data_sources import validate_data_config_payload
 from algotrading.src.models.signals import SignalType
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ModelType(str, Enum):
@@ -39,6 +40,16 @@ class CoreRLModelConfig(ModelConfigBase):
     environment_config: dict[str, object] = Field(default_factory=dict)
     reward_function: str = Field(min_length=1)
 
+    @field_validator("training_data_config")
+    @classmethod
+    def _validate_training_data_config(
+        cls,
+        value: dict[str, object],
+    ) -> dict[str, object]:
+        """Validate loose training data-source settings when present."""
+
+        return validate_data_config_payload(value, require_complete=False)
+
 
 class SupportingModelConfig(ModelConfigBase):
     """Configuration fields for supporting ML/RL models."""
@@ -59,6 +70,16 @@ class ModelConfigCreate(ModelConfigBase):
     reward_function: str | None = None
     input_data_types: list[str] = Field(default_factory=list)
     input_frequency: str | None = None
+
+    @field_validator("training_data_config")
+    @classmethod
+    def _validate_training_data_config(
+        cls,
+        value: dict[str, object],
+    ) -> dict[str, object]:
+        """Validate loose training data-source settings when present."""
+
+        return validate_data_config_payload(value, require_complete=False)
 
     @model_validator(mode="after")
     def validate_model_type_fields(self) -> ModelConfigCreate:
@@ -98,6 +119,18 @@ class ModelConfigUpdate(BaseModel):
     reward_function: str | None = None
     input_data_types: list[str] | None = None
     input_frequency: str | None = None
+
+    @field_validator("training_data_config")
+    @classmethod
+    def _validate_training_data_config(
+        cls,
+        value: dict[str, object] | None,
+    ) -> dict[str, object] | None:
+        """Validate loose training data-source settings when supplied."""
+
+        if value is None:
+            return None
+        return validate_data_config_payload(value, require_complete=False)
 
 
 class ModelConfigResponse(ModelConfigCreate):
