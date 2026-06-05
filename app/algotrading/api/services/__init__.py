@@ -13,6 +13,12 @@ from algotrading.api.services.backtest_service import (
     create_default_backtest_service,
     get_backtest_service,
 )
+from algotrading.api.services.data_acquisition_service import (
+    DataAcquisitionService,
+    DataAcquisitionServiceError,
+    create_default_data_acquisition_service,
+    get_data_acquisition_service,
+)
 from algotrading.api.services.deployment_service import (
     DeploymentSelectionNotFoundError,
     DeploymentService,
@@ -75,6 +81,10 @@ __all__ = [
     "DeploymentSelectionNotFoundError",
     "create_default_deployment_service",
     "get_deployment_service",
+    "DataAcquisitionService",
+    "DataAcquisitionServiceError",
+    "create_default_data_acquisition_service",
+    "get_data_acquisition_service",
     "ModelService",
     "ModelServiceError",
     "ModelValidationError",

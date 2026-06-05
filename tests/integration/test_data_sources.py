@@ -10,6 +10,8 @@ from typing import Protocol
 from zoneinfo import ZoneInfo
 
 import pytest
+from algotrading.api.config import APIConfig
+from algotrading.api.main import create_app
 from algotrading.api.schemas.backtesting import (
     BacktestRequest,
     build_backtest_data_request,
@@ -20,9 +22,19 @@ from algotrading.api.schemas.data_sources import (
     NewsDataProvider,
     normalize_training_data_request,
 )
+from algotrading.api.services.data_acquisition_service import DataAcquisitionService
 from algotrading.src.broker import BarData, InteractiveBrokersAdapter
+from algotrading.src.broker.registry import BrokerRegistry
+from algotrading.src.data_pipeline.acquisition import (
+    AcquisitionStatus,
+    HistoricalMarketDataAcquirer,
+    HistoricalNewsAcquirer,
+    NewsDataAcquisitionError,
+    model_requires_news,
+)
 from algotrading.src.data_pipeline.sources import BrokerDataSource, FileSource
 from algotrading.src.data_pipeline.sources.exceptions import DataValidationError
+from algotrading.src.data_pipeline.sources.news_factory import NewsSourceFactory
 from algotrading.src.data_pipeline.storage import (
     LocalDataCacheMissError,
     LocalDataStore,
@@ -35,6 +47,9 @@ from algotrading.src.data_pipeline.types import (
     DataType,
     NewsRecord,
 )
+from algotrading.src.models.registry import ModelEntryConfig, SupportingModelRegistry
+from algotrading.src.models.signals import SignalType
+from fastapi.testclient import TestClient
 
 from tests.mocks import MockBrokerAdapter
 
@@ -122,8 +137,9 @@ def test_file_source_validation_errors(tmp_path: Path) -> None:
 def test_canonical_data_request_and_local_store_round_trip(tmp_path: Path) -> None:
     """Normalize data-source configs and round-trip canonical local data."""
 
-    start = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)
-    end = start + timedelta(minutes=1)
+    first_bar_time = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)
+    start = first_bar_time - timedelta(seconds=30)
+    end = first_bar_time + timedelta(minutes=1, seconds=30)
     raw_path = tmp_path / "raw" / "aapl.csv"
     model_data_config: dict[str, object] = {
         "symbols": [" aapl "],
@@ -278,6 +294,301 @@ def test_canonical_data_request_and_local_store_round_trip(tmp_path: Path) -> No
         store.find_market_data(outside_request)
 
 
+def test_historical_market_acquirer_file_backed_writes_canonical_store(
+    tmp_path: Path,
+) -> None:
+    """Acquire explicit CSV market data and persist canonical local artifacts."""
+
+    start = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)
+    end = start + timedelta(minutes=1)
+    raw_path = tmp_path / "raw" / "aapl.csv"
+    raw_path.parent.mkdir(parents=True)
+    raw_path.write_text(
+        "timestamp,symbol,open,high,low,close,volume,vwap,trade_count\n"
+        "2024-01-02T14:30:00+00:00,AAPL,190,191,189.5,190.5,1000,190.2,10\n"
+        "2024-01-02T14:31:00+00:00,AAPL,190.5,192,190,191.7,1200,191.2,12\n",
+        encoding="utf-8",
+    )
+    request = normalize_training_data_request(
+        {
+            "symbols": ["aapl"],
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "data_frequency": "1m",
+            "market": {
+                "provider": "file",
+                "symbol_files": {"aapl": str(raw_path)},
+            },
+        },
+        {"cache_policy": "refresh"},
+    )
+    store = LocalDataStore(root=tmp_path / "sourced")
+    acquirer = HistoricalMarketDataAcquirer(store=store)
+
+    result = acquirer.acquire(request)
+
+    assert result.provider == MarketDataProvider.FILE.value
+    assert result.reports[0].status == AcquisitionStatus.ACQUIRED.value
+    assert result.reports[0].row_count == 2
+    assert Path(result.reports[0].data_path or "").exists()
+    assert Path(result.reports[0].manifest_path or "").exists()
+
+    cached_request = normalize_training_data_request(
+        request.model_dump(mode="json"),
+        {"cache_policy": CachePolicy.PREFER_CACHE.value},
+    )
+    cached_result = acquirer.acquire(cached_request)
+    loaded = store.find_market_data(cached_request)
+
+    assert cached_result.reports[0].status == AcquisitionStatus.CACHED.value
+    assert loaded["AAPL"].batch.records[-1].payload["close"] == 191.7
+    assert loaded["AAPL"].manifest.source_file_paths == (str(raw_path),)
+
+
+def test_market_acquisition_api_accepts_loose_file_backed_payload(
+    tmp_path: Path,
+) -> None:
+    """Acquire file-backed market data through the FastAPI route."""
+
+    start = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)
+    end = start + timedelta(minutes=1)
+    raw_path = tmp_path / "raw" / "msft.csv"
+    raw_path.parent.mkdir(parents=True)
+    raw_path.write_text(
+        "date,symbol,open,high,low,close,volume,wap,count\n"
+        "2024-01-02T14:30:00+00:00,MSFT,370,371,369,370.5,800,370.2,8\n"
+        "2024-01-02T14:31:00+00:00,MSFT,370.5,372,370,371.2,900,371.0,9\n",
+        encoding="utf-8",
+    )
+    api_config = APIConfig(
+        api_key="data-secret-key",
+        debug=True,
+        cors_origins=["http://localhost:3000"],
+    )
+    app = create_app(api_config)
+    store = LocalDataStore(root=tmp_path / "sourced")
+    app.state.data_acquisition_service = DataAcquisitionService(
+        store=store,
+        api_config=api_config,
+        broker_registry=BrokerRegistry.isolated(),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/data/market/acquire",
+            headers={"X-API-Key": "data-secret-key"},
+            json={
+                "symbols": ["msft"],
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "data_frequency": "1m",
+                "cache_policy": "refresh",
+                "market": {
+                    "provider": "file",
+                    "symbol_files": {"msft": str(raw_path)},
+                },
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()["data"]
+    assert payload["provider"] == "file"
+    assert payload["reports"][0]["symbol"] == "MSFT"
+    assert payload["reports"][0]["row_count"] == 2
+    assert Path(payload["reports"][0]["data_path"]).exists()
+
+    request = normalize_training_data_request(
+        {
+            "symbols": ["MSFT"],
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "data_frequency": "1m",
+            "market": {"provider": "file"},
+        }
+    )
+    assert store.find_market_data(request)["MSFT"].manifest.record_count == 2
+
+
+def test_historical_news_acquirer_detects_required_news_and_persists_mock(
+    tmp_path: Path,
+) -> None:
+    """Acquire required mock news for a model with NEWS_TEXT supporting inputs."""
+
+    start = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)
+    end = start + timedelta(minutes=3)
+    supporting_model_id = "sentiment-news-1"
+    registry = SupportingModelRegistry()
+    registry.register(
+        ModelEntryConfig(
+            model_id=supporting_model_id,
+            model_type="ml",
+            signal_type=SignalType.SENTIMENT,
+            trainer_class="algotrading.src.models.supporting.sentiment.news_sentiment.NewsSentimentTrainer",
+            input_data_types=[DataType.NEWS_TEXT],
+            input_frequency=DataFrequency.IRREGULAR,
+        )
+    )
+    model = {"supporting_model_ids": [supporting_model_id]}
+    request = normalize_training_data_request(
+        {
+            "symbols": ["aapl"],
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "data_frequency": "1m",
+            "cache_policy": "refresh",
+            "market": {"provider": "file"},
+            "news": {
+                "enabled": True,
+                "provider": "mock",
+                "include_body": True,
+                "limit": 10,
+            },
+        }
+    )
+    store = LocalDataStore(root=tmp_path / "sourced")
+    acquirer = HistoricalNewsAcquirer(
+        store=store,
+        supporting_registry=registry,
+        default_provider=NewsDataProvider.MOCK,
+    )
+
+    assert model_requires_news(model, registry) is True
+
+    result = acquirer.acquire(request, model=model)
+    loaded = store.find_news_data(request)
+
+    assert result.provider == NewsDataProvider.MOCK.value
+    assert result.frequency == DataFrequency.IRREGULAR.value
+    assert result.reports[0].status == AcquisitionStatus.ACQUIRED.value
+    assert result.reports[0].row_count > 0
+    assert Path(result.reports[0].data_path or "").exists()
+    assert Path(result.reports[0].manifest_path or "").exists()
+    assert loaded["AAPL"].records[0].headline
+
+
+def test_required_news_failure_blocks_acquisition(tmp_path: Path) -> None:
+    """Required news should fail loudly when no cache or provider can satisfy it."""
+
+    start = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)
+    end = start + timedelta(minutes=1)
+    request = normalize_training_data_request(
+        {
+            "symbols": ["aapl"],
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "data_frequency": "1m",
+            "cache_policy": "refresh",
+            "market": {"provider": "file"},
+            "news": {"enabled": True, "required": True, "provider": "none"},
+        }
+    )
+    acquirer = HistoricalNewsAcquirer(store=LocalDataStore(root=tmp_path / "sourced"))
+
+    with pytest.raises(NewsDataAcquisitionError, match="no news provider"):
+        acquirer.acquire(request)
+
+
+def test_news_acquisition_api_accepts_loose_mock_payload(tmp_path: Path) -> None:
+    """Acquire mock news through the FastAPI route and canonical service path."""
+
+    start = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)
+    end = start + timedelta(minutes=2)
+    api_config = APIConfig(
+        api_key="data-secret-key",
+        debug=True,
+        cors_origins=["http://localhost:3000"],
+    )
+    app = create_app(api_config)
+    store = LocalDataStore(root=tmp_path / "sourced")
+    app.state.data_acquisition_service = DataAcquisitionService(
+        store=store,
+        api_config=api_config,
+        broker_registry=BrokerRegistry.isolated(),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/data/news/acquire",
+            headers={"X-API-Key": "data-secret-key"},
+            json={
+                "symbols": ["aapl"],
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "data_frequency": "1m",
+                "cache_policy": "refresh",
+                "market": {"provider": "file"},
+                "news": {
+                    "enabled": True,
+                    "provider": "mock",
+                    "include_body": True,
+                    "limit": 5,
+                },
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()["data"]
+    assert payload["provider"] == "mock"
+    assert payload["reports"][0]["symbol"] == "AAPL"
+    assert payload["reports"][0]["row_count"] > 0
+    assert Path(payload["reports"][0]["data_path"]).exists()
+
+    request = normalize_training_data_request(
+        {
+            "symbols": ["AAPL"],
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "data_frequency": "1m",
+            "market": {"provider": "file"},
+            "news": {"enabled": True, "provider": "mock"},
+        }
+    )
+    assert store.find_news_data(request)["AAPL"].manifest.record_count > 0
+
+
+@pytest.mark.requires_news_api
+@pytest.mark.slow
+def test_news_acquirer_primary_provider_persists_canonical_store(
+    confirm_news_api: dict[str, str],
+    tmp_path: Path,
+) -> None:
+    """Acquire real provider news and persist canonical JSONL plus manifest."""
+
+    end = datetime.now(tz=UTC)
+    start = end - timedelta(days=7)
+    request = normalize_training_data_request(
+        {
+            "symbols": ["AAPL"],
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "data_frequency": "1d",
+            "cache_policy": "refresh",
+            "market": {"provider": "file"},
+            "news": {
+                "enabled": True,
+                "required": True,
+                "provider": "benzinga",
+                "fallback_provider": "alphavantage",
+                "include_body": False,
+                "limit": 10,
+            },
+        }
+    )
+    factory = NewsSourceFactory.from_files(
+        providers_path=confirm_news_api["providers_path"],
+        credentials_path=confirm_news_api["credentials_path"],
+    )
+    store = LocalDataStore(root=tmp_path / "sourced")
+    acquirer = HistoricalNewsAcquirer(store=store, news_source_factory=factory)
+
+    result = acquirer.acquire(request)
+    loaded = store.find_news_data(request)
+
+    assert result.reports[0].row_count > 0
+    assert Path(result.reports[0].manifest_path or "").exists()
+    assert loaded["AAPL"].records[0].news_id
+
+
 @pytest.mark.requires_ib
 def test_broker_source_historical(confirm_ib_gateway: dict[str, object]) -> None:
     """Fetch historical bars through BrokerDataSource with a live IB adapter."""
@@ -301,6 +612,99 @@ def test_broker_source_historical(confirm_ib_gateway: dict[str, object]) -> None
         assert batch.records[-1].payload["close"] > 0
     finally:
         adapter.disconnect()
+
+
+@pytest.mark.requires_ib
+def test_market_acquirer_ib_persists_canonical_store(
+    confirm_ib_gateway: dict[str, object],
+    tmp_path: Path,
+) -> None:
+    """Acquire IB historical bars and persist canonical market data."""
+
+    conn = confirm_ib_gateway
+    end = datetime.now(tz=UTC) - timedelta(minutes=1)
+    start = end - timedelta(minutes=5)
+    request = normalize_training_data_request(
+        {
+            "symbols": ["AMD"],
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "data_frequency": "5s",
+            "cache_policy": "refresh",
+            "market": {
+                "provider": "ib",
+                "bar_size": "5 secs",
+                "broker_data_type": "TRADES",
+                "exchange": "SMART",
+                "currency": "USD",
+            },
+        }
+    )
+    store = LocalDataStore(root=tmp_path / "sourced")
+    acquirer = HistoricalMarketDataAcquirer(
+        store=store,
+        broker_registry=BrokerRegistry.isolated(),
+        broker_config={},
+        broker_connection_params={
+            "host": str(conn["host"]),
+            "port": int(conn["port"]),
+            "client_id": int(conn["client_id"]) + 52,
+        },
+    )
+
+    result = acquirer.acquire(request)
+    loaded = store.find_market_data(request)
+
+    assert result.provider == MarketDataProvider.IB.value
+    assert result.reports[0].row_count > 0
+    assert result.reports[0].provider == MarketDataProvider.IB.value
+    assert Path(result.reports[0].data_path or "").exists()
+    assert loaded["AMD"].manifest.record_count == result.reports[0].row_count
+
+
+@pytest.mark.requires_alpaca
+def test_market_acquirer_alpaca_persists_canonical_store(
+    confirm_alpaca_paper: dict[str, str],
+    tmp_path: Path,
+) -> None:
+    """Acquire Alpaca historical bars and persist canonical market data."""
+
+    pytest.importorskip("alpaca")
+    end = datetime.now(tz=UTC) - timedelta(minutes=20)
+    start = end - timedelta(days=5)
+    request = normalize_training_data_request(
+        {
+            "symbols": ["AAPL"],
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "data_frequency": "1m",
+            "cache_policy": "refresh",
+            "market": {
+                "provider": "alpaca",
+                "bar_size": "1 min",
+                "broker_data_type": "TRADES",
+                "exchange": "SMART",
+                "currency": "USD",
+                "primary_exchange": "NASDAQ",
+            },
+        }
+    )
+    store = LocalDataStore(root=tmp_path / "sourced")
+    acquirer = HistoricalMarketDataAcquirer(
+        store=store,
+        broker_registry=BrokerRegistry.isolated(),
+        broker_config={**confirm_alpaca_paper, "paper": True, "data_feed": "iex"},
+        broker_connection_params={},
+    )
+
+    result = acquirer.acquire(request)
+    loaded = store.find_market_data(request)
+
+    assert result.provider == MarketDataProvider.ALPACA.value
+    assert result.reports[0].row_count > 0
+    assert result.reports[0].provider == MarketDataProvider.ALPACA.value
+    assert Path(result.reports[0].manifest_path or "").exists()
+    assert loaded["AAPL"].batch.records[-1].payload["close"] > 0
 
 
 @pytest.mark.requires_ib

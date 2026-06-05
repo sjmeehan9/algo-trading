@@ -38,6 +38,9 @@ class _ContractDefaults:
     primary_exchange: str | None = None
 
 
+ContractDefaults = _ContractDefaults
+
+
 def contract_spec_from_config(config: dict[str, object]) -> ContractSpec:
     """Build a ``ContractSpec`` from a contract-style config dictionary.
 
@@ -416,6 +419,7 @@ class BrokerDataSource(DataSource):
 
 __all__ = [
     "BrokerDataSource",
+    "ContractDefaults",
     "bar_to_record",
     "contract_spec_from_config",
 ]

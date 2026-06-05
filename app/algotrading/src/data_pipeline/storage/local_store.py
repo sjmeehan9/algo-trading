@@ -555,18 +555,16 @@ class LocalDataStore:
             raise LocalDataCacheMissError(
                 f"Local cache for {symbol} has no actual coverage range in manifest"
             )
-        coverage_start = manifest.actual_start
-        coverage_end = manifest.actual_end
-        if manifest.data_type == DataType.NEWS_TEXT:
-            coverage_start = manifest.requested_start
-            coverage_end = manifest.requested_end
+        coverage_start = manifest.requested_start
+        coverage_end = manifest.requested_end
         if coverage_start > requested_start or coverage_end < requested_end:
             raise LocalDataCacheMissError(
                 f"Local cache for {symbol} from provider '{_slug(provider)}' does "
                 f"not cover {requested_start.isoformat()} to "
-                f"{requested_end.isoformat()}; actual coverage is "
-                f"{coverage_start.isoformat()} to "
-                f"{coverage_end.isoformat()}"
+                f"{requested_end.isoformat()}; requested coverage is "
+                f"{coverage_start.isoformat()} to {coverage_end.isoformat()}; "
+                f"actual data range is {manifest.actual_start.isoformat()} to "
+                f"{manifest.actual_end.isoformat()}"
             )
         if (
             manifest.data_type == DataType.MARKET_BAR

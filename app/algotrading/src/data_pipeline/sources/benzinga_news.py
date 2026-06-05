@@ -98,7 +98,7 @@ class BenzingaNewsSource(NewsDataSource):
             ) from exc
 
         try:
-            client = news_data.News(self._api_key)
+            client = news_data.News(self._api_key, log=False)
             _ = client.news(pagesize=1)
         except Exception as exc:  # pragma: no cover - network/provider behavior
             raise DataSourceConnectionError(
