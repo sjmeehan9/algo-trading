@@ -235,6 +235,15 @@ describe('Training', () => {
     });
   });
 
+  it('displays running and completed job state from API payloads', async () => {
+    renderTraining();
+
+    expect(await screen.findByText(/Progress: 10.0%/)).toBeInTheDocument();
+    expect(screen.getByText('100 / 1,000 timesteps')).toBeInTheDocument();
+    expect(screen.getByText('job-complete')).toBeInTheDocument();
+    expect(screen.getByText('completed')).toBeInTheDocument();
+  });
+
   it('reorders and cancels queued jobs', async () => {
     const user = userEvent.setup();
     renderTraining();

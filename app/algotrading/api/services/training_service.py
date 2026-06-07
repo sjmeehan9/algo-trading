@@ -84,6 +84,8 @@ class TrainingService:
         self._queue: deque[str] = deque()
         self._queue_event: asyncio.Event = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._start_lock: asyncio.Lock | None = None
+        self._start_lock_loop: asyncio.AbstractEventLoop | None = None
 
         self._worker.attach(self)
         self._load_jobs()
@@ -103,8 +105,25 @@ class TrainingService:
     async def start(self) -> None:
         """Start the worker loop and bind the running event loop."""
 
-        self._loop = asyncio.get_running_loop()
-        self._worker.start()
+        await self.ensure_started()
+
+    async def ensure_started(self) -> None:
+        """Start the worker loop once for the active event loop."""
+
+        loop = asyncio.get_running_loop()
+        start_lock = self._get_start_lock(loop)
+        async with start_lock:
+            if self._worker.is_running:
+                if self._loop is not None and self._loop is not loop:
+                    raise TrainingServiceError(
+                        "Training worker is already running on a different event loop"
+                    )
+                self._loop = loop
+                return
+
+            self._loop = loop
+            self._worker.start()
+            self._signal_queue()
 
     async def stop(self) -> None:
         """Stop the worker loop and persist any final state."""
@@ -145,6 +164,8 @@ class TrainingService:
 
         if total_timesteps < 1:
             raise TrainingServiceError("total_timesteps must be a positive integer")
+
+        await self.ensure_started()
 
         job_id = f"job-{uuid4().hex[:12]}"
         job = TrainingJob(
@@ -553,6 +574,12 @@ class TrainingService:
 
         loop.call_soon_threadsafe(self._queue_event.set)
 
+    def _get_start_lock(self, loop: asyncio.AbstractEventLoop) -> asyncio.Lock:
+        if self._start_lock is None or self._start_lock_loop is not loop:
+            self._start_lock = asyncio.Lock()
+            self._start_lock_loop = loop
+        return self._start_lock
+
     async def _broadcast_job(self, job: TrainingJob) -> None:
         """Broadcast a job state change to all listeners."""
 
@@ -634,10 +661,19 @@ def create_default_training_service(
     ws_manager: WebSocketManager,
     model_service: ModelService,
     project_root: Path | None = None,
+    api_config: Any | None = None,
     worker: TrainingWorker | None = None,
 ) -> TrainingService:
     """Build a TrainingService with filesystem-backed defaults."""
 
+    from algotrading.api.config import APIConfig
+    from algotrading.api.services.data_acquisition_service import (
+        create_default_data_acquisition_service,
+    )
+    from algotrading.api.training.factories import (
+        build_dataset_factory,
+        build_environment_factory,
+    )
     from algotrading.api.workers.training_worker import DefaultTrainingExecutor
 
     root = project_root or Path(__file__).resolve().parents[4]
@@ -646,7 +682,27 @@ def create_default_training_service(
     models_dir = root / "data" / "models"
 
     if worker is None:
-        executor = DefaultTrainingExecutor(models_dir=models_dir)
+        resolved_api_config = api_config or APIConfig()
+        data_service = create_default_data_acquisition_service(
+            api_config=resolved_api_config,
+            project_root=root,
+        )
+        data_service._supporting_registry = model_service.supporting_registry
+        environment_factory = build_environment_factory(
+            data_service=data_service,
+            model_service=model_service,
+            project_root=root,
+        )
+        dataset_factory = build_dataset_factory(
+            data_service=data_service,
+            model_service=model_service,
+            project_root=root,
+        )
+        executor = DefaultTrainingExecutor(
+            models_dir=models_dir,
+            environment_factory=environment_factory,
+            dataset_factory=dataset_factory,
+        )
         worker = TrainingWorker(executor=executor)
 
     return TrainingService(
@@ -668,7 +724,9 @@ def get_training_service(request: Request) -> TrainingService:
         model_service = get_model_service(request)
         ws_manager = request.app.state.ws_manager
         service = create_default_training_service(
-            ws_manager=ws_manager, model_service=model_service
+            ws_manager=ws_manager,
+            model_service=model_service,
+            api_config=request.app.state.api_config,
         )
         request.app.state.training_service = service
 

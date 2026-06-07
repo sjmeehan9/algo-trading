@@ -147,18 +147,25 @@ class DefaultTrainingExecutor:
                 f"Unsupported SB3 algorithm '{context.model.algorithm}'"
             ) from exc
 
-        env = self._environment_factory(context.model, context.request.data_config)
-
         total_timesteps = int(context.job.total_timesteps or self.DEFAULT_TIMESTEPS)
         if total_timesteps < 1:
             raise TrainingExecutorConfigurationError(
                 "total_timesteps must be a positive integer"
             )
 
+        factory_data_config = dict(context.request.data_config)
+        factory_data_config.setdefault("total_timesteps", total_timesteps)
+        env = self._environment_factory(context.model, factory_data_config)
+
         hyperparameters = dict(context.model.hyperparameters)
         learning_rate = _coerce_optional_float(hyperparameters.get("learning_rate"))
         batch_size = _coerce_optional_int(hyperparameters.get("batch_size"))
         n_steps = _coerce_optional_int(hyperparameters.get("n_steps"))
+        policy = _resolve_policy(context=context, env=env)
+        custom_params = _training_custom_params(
+            hyperparameters=hyperparameters,
+            training_config=context.request.training_config,
+        )
 
         config = TrainingConfig(
             total_timesteps=total_timesteps,
@@ -166,10 +173,10 @@ class DefaultTrainingExecutor:
             batch_size=batch_size,
             n_steps=n_steps,
             tensorboard_log=context.request.training_config.get("tensorboard_log"),
-            custom_params=context.request.training_config.get("custom_params"),
+            custom_params=custom_params,
         )
 
-        trainer = StableBaselines3Trainer(algorithm=algorithm)
+        trainer = StableBaselines3Trainer(algorithm=algorithm, policy=policy)
         trainer.create_model(env=env, config=config)
 
         cancellation = context.cancellation_event
@@ -273,6 +280,11 @@ class DefaultTrainingExecutor:
         if context.cancellation_event.is_set():
             raise TrainingCancelledError("Training cancelled by request")
 
+        model_path = self._save_supporting_ml_artifact(
+            trainer=trainer,
+            context=context,
+        )
+
         context.progress_callback(
             TrainingProgressUpdate(
                 current_timestep=epochs,
@@ -303,8 +315,27 @@ class DefaultTrainingExecutor:
                 "training_time_seconds": float(result.training_time_seconds),
             },
             training_metrics=training_metrics,
-            model_path=None,
+            model_path=str(model_path),
         )
+
+    def _save_supporting_ml_artifact(
+        self,
+        *,
+        trainer: Any,
+        context: TrainingJobContext,
+    ) -> Path:
+        """Persist a supporting ML trainer artifact directory."""
+
+        target_dir = self._models_dir / context.model.model_id / context.job.job_id
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            trainer.save(str(target_dir))
+        except Exception as exc:
+            raise TrainingExecutorError(
+                "Failed saving trained supporting ML artifact for "
+                f"job_id={context.job.job_id}"
+            ) from exc
+        return target_dir
 
     def _save_model_artifact(
         self,
@@ -357,6 +388,12 @@ class TrainingWorker:
         """Return the configured training executor."""
 
         return self._executor
+
+    @property
+    def is_running(self) -> bool:
+        """Return whether the background worker loop is active."""
+
+        return self._task is not None and not self._task.done()
 
     def attach(self, service: Any) -> None:
         """Attach the worker to its owning training service."""
@@ -470,3 +507,51 @@ def _coerce_optional_float(value: object) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     return None
+
+
+def _resolve_policy(*, context: TrainingJobContext, env: Any) -> str:
+    """Resolve the SB3 policy name for the model and environment shape."""
+
+    raw_policy = (
+        context.request.training_config.get("policy")
+        or context.request.training_config.get("model_policy")
+        or context.model.hyperparameters.get("policy")
+        or context.model.hyperparameters.get("model_policy")
+    )
+    if raw_policy is not None:
+        return str(raw_policy)
+
+    try:
+        from gymnasium.spaces import Dict as DictSpace
+    except Exception:
+        return "MlpPolicy"
+
+    if isinstance(getattr(env, "observation_space", None), DictSpace):
+        return "MultiInputPolicy"
+    return "MlpPolicy"
+
+
+def _training_custom_params(
+    *,
+    hyperparameters: dict[str, Any],
+    training_config: dict[str, Any],
+) -> dict[str, object] | None:
+    """Merge model and job SB3 custom parameters."""
+
+    reserved = {
+        "learning_rate",
+        "batch_size",
+        "n_steps",
+        "policy",
+        "model_policy",
+        "total_timesteps",
+    }
+    params = {
+        str(key): value
+        for key, value in hyperparameters.items()
+        if key not in reserved and value is not None
+    }
+    raw_custom = training_config.get("custom_params")
+    if isinstance(raw_custom, dict):
+        params.update({str(key): value for key, value in raw_custom.items()})
+    return params or None

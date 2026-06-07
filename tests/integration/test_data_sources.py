@@ -622,8 +622,10 @@ def test_market_acquirer_ib_persists_canonical_store(
     """Acquire IB historical bars and persist canonical market data."""
 
     conn = confirm_ib_gateway
-    end = datetime.now(tz=UTC) - timedelta(minutes=1)
-    start = end - timedelta(minutes=5)
+    # Use a known regular-session window so the provider-confirm test remains
+    # stable after market close and on weekends.
+    start = datetime(2026, 2, 13, 15, 0, tzinfo=UTC)
+    end = start + timedelta(minutes=5)
     request = normalize_training_data_request(
         {
             "symbols": ["AMD"],

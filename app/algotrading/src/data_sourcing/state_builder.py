@@ -150,6 +150,77 @@ class StateBuilder:
 
         return None
 
+    def load_dataframe(
+        self,
+        dataframe: pd.DataFrame,
+        *,
+        episode_length: int | None = None,
+        total_timesteps: int | None = None,
+    ) -> None:
+        """Load pre-normalized market data for API-backed training workflows."""
+
+        if not isinstance(dataframe, pd.DataFrame):
+            raise TypeError("StateBuilder dataframe input must be a pandas DataFrame")
+        if dataframe.empty:
+            raise ValueError("StateBuilder dataframe input must not be empty")
+
+        state_config = self.pipeline["pipeline"]["state_data_config"]
+        required_columns = list(state_config["columns"].keys())
+        missing_columns = [
+            column for column in required_columns if column not in dataframe
+        ]
+        if missing_columns:
+            raise ValueError(
+                "StateBuilder dataframe is missing required columns: "
+                + ", ".join(missing_columns)
+            )
+
+        window_size = int(state_config["past_events"])
+        if len(dataframe) <= window_size:
+            raise ValueError(
+                "StateBuilder dataframe must contain more rows than past_events"
+            )
+
+        resolved_episode_length = (
+            int(episode_length)
+            if episode_length is not None
+            else len(dataframe) - window_size
+        )
+        if resolved_episode_length < 1:
+            raise ValueError("episode_length must be positive")
+
+        resolved_total_timesteps = (
+            int(total_timesteps)
+            if total_timesteps is not None
+            else resolved_episode_length
+        )
+        if resolved_total_timesteps < 1:
+            raise ValueError("total_timesteps must be positive")
+
+        self.initialise_counters()
+        self.terminated = False
+        self.timed_out = False
+        self.file_offset = 0
+        self.file_step = 0
+        self.final_dataframe = dataframe[required_columns].reset_index(drop=True).copy()
+        self.episode_length = resolved_episode_length
+        self.total_timesteps = resolved_total_timesteps
+        self.master_date_list = self._dataframe_dates(self.final_dataframe)
+
+        self.state_manager.load_dataframe(self.final_dataframe)
+        self.state_manager.episode_length = self.episode_length
+        self.state_manager.total_timesteps = self.total_timesteps
+        self.state_manager.state_counters = self.state_counters
+        self.state_manager.terminated = self.terminated
+        self.state_manager.timed_out = self.timed_out
+
+        return None
+
+    def _dataframe_dates(self, dataframe: pd.DataFrame) -> list[datetime]:
+        parsed = pd.to_datetime(dataframe["date"], utc=True, errors="coerce")
+        dates = sorted({item.date() for item in parsed.dropna()})
+        return [datetime.combine(item, datetime.min.time()) for item in dates]
+
     def initialise_counters(self) -> None:
         """Reset step, window, and episode counters."""
         # Setup counters

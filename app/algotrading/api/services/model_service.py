@@ -515,6 +515,7 @@ class ModelService:
             "trainer_type": config.trainer_type,
             "algorithm": config.algorithm,
             "hyperparameters": dict(config.hyperparameters),
+            "training_data_config": dict(config.training_data_config),
             "input_data_types": list(config.input_data_types),
             "input_frequency": config.input_frequency,
             "created_at": now_iso,
@@ -654,6 +655,8 @@ class ModelService:
             payload["algorithm"] = updates.algorithm
         if updates.hyperparameters is not None:
             payload["hyperparameters"] = dict(updates.hyperparameters)
+        if updates.training_data_config is not None:
+            payload["training_data_config"] = dict(updates.training_data_config)
         if updates.signal_type is not None:
             payload["signal_type"] = updates.signal_type
         if updates.input_data_types is not None:
@@ -672,6 +675,7 @@ class ModelService:
             "trainer_type": candidate.trainer_type,
             "algorithm": candidate.algorithm,
             "hyperparameters": dict(candidate.hyperparameters),
+            "training_data_config": dict(candidate.training_data_config),
             "input_data_types": list(candidate.input_data_types),
             "input_frequency": candidate.input_frequency,
             "created_at": payload.get("created_at", now_iso),
@@ -931,7 +935,12 @@ class ModelService:
                 for key, value in dict(payload.get("hyperparameters") or {}).items()
                 if isinstance(value, (int, float, str, bool))
             },
-            training_data_config={},
+            training_data_config={
+                str(key): value
+                for key, value in dict(
+                    payload.get("training_data_config") or {}
+                ).items()
+            },
             supporting_model_ids=[],
             strategy_ids=[],
             environment_config={},
@@ -963,7 +972,7 @@ class ModelService:
             "trainer_type": response.trainer_type,
             "algorithm": response.algorithm,
             "hyperparameters": dict(response.hyperparameters),
-            "training_data_config": {},
+            "training_data_config": dict(response.training_data_config),
             "supporting_model_ids": [],
             "strategy_ids": [],
             "environment_config": {},
