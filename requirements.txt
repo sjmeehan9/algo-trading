@@ -23,4 +23,5 @@ isort>=7.0.0
 requests>=2.31.0
 alpaca-py>=0.28.1  # official Alpaca Trading/Data API SDK for the Alpaca broker adapter
 vaderSentiment>=3.3.2
+transformers>=4.40.0  # FinBERT/transformer sentiment backend for supporting models
 openai>=1.30.0  # LLM hyperparameter optimizer integration

@@ -46,6 +46,8 @@ class NewsSentimentModel:
         self._tokenizer: Any | None = None
         self._transformer_model: Any | None = None
         self._torch: Any | None = None
+        self._positive_index = 2
+        self._negative_index = 0
 
         self._load_model_backend()
 
@@ -293,6 +295,45 @@ class NewsSentimentModel:
         if self._config.device == "cuda" and torch.cuda.is_available():
             self._transformer_model = self._transformer_model.to("cuda")
         self._transformer_model.eval()
+        self._positive_index, self._negative_index = self._resolve_label_indices()
+
+    def _resolve_label_indices(self) -> tuple[int, int]:
+        """Resolve positive/negative logit indices from the model label map.
+
+        Different sentiment models order their classification labels
+        differently (for example ``ProsusAI/finbert`` uses
+        ``{0: positive, 1: negative, 2: neutral}`` while other models use
+        ``{0: negative, 1: neutral, 2: positive}``). Resolving the indices from
+        ``id2label`` avoids hardcoding a single layout and prevents inverted
+        sentiment scores.
+
+        Returns:
+            A ``(positive_index, negative_index)`` tuple. Falls back to the
+            common ``[negative, neutral, positive]`` layout when labels cannot
+            be interpreted.
+        """
+
+        config = getattr(self._transformer_model, "config", None)
+        id2label = getattr(config, "id2label", None) if config is not None else None
+
+        positive_index: int | None = None
+        negative_index: int | None = None
+        if isinstance(id2label, dict):
+            for raw_index, raw_label in id2label.items():
+                label = str(raw_label).strip().lower()
+                try:
+                    index = int(raw_index)
+                except (TypeError, ValueError):
+                    continue
+                if label.startswith("pos") or label in {"label_2", "bullish"}:
+                    positive_index = index
+                elif label.startswith("neg") or label in {"label_0", "bearish"}:
+                    negative_index = index
+
+        if positive_index is None or negative_index is None:
+            # Fall back to the widely used [negative, neutral, positive] layout.
+            return 2, 0
+        return positive_index, negative_index
 
     def _predict_scores(self, processed_text: str) -> tuple[float, float]:
         """Compute sentiment score and confidence for one preprocessed text."""
@@ -352,9 +393,11 @@ class NewsSentimentModel:
             probabilities = self._torch.softmax(outputs.logits, dim=-1)
 
         values: list[tuple[float, float]] = []
-        for neg, _neu, pos in probabilities.tolist():
-            sentiment_value = self._apply_calibration(float(pos) - float(neg))
-            confidence = float(min(1.0, max(0.0, max(float(pos), float(neg)))))
+        for row in probabilities.tolist():
+            pos = float(row[self._positive_index])
+            neg = float(row[self._negative_index])
+            sentiment_value = self._apply_calibration(pos - neg)
+            confidence = float(min(1.0, max(0.0, max(pos, neg))))
             values.append((sentiment_value, confidence))
         return values
 

@@ -187,25 +187,102 @@ class SupportingModelRegistry:
             entry for entry in self._entries.values() if entry.state == ModelState.READY
         ]
 
-    def load_model(self, model_id: str) -> None:
-        """Instantiate and attach the trainer class for a model entry."""
+    def load_model(
+        self,
+        model_id: str,
+        model_path: str | None = None,
+        config: dict[str, object] | None = None,
+    ) -> None:
+        """Instantiate and attach the trainer class for a model entry.
+
+        Args:
+            model_id: Identifier of the registered supporting model.
+            model_path: Optional artifact path. When provided the resolved
+                trainer is loaded from this path and the path is persisted on
+                the entry configuration.
+            config: Optional configuration overrides merged into the entry
+                configuration before instantiation. This allows lifecycle
+                callers to record activation hyperparameters (for example a
+                pretrained sentiment backend) without a separate update call.
+
+        Raises:
+            RegistryError: If the trainer class cannot be resolved, instantiated,
+                or loaded from ``model_path``.
+        """
 
         with self._lock:
             entry = self._require_entry(model_id)
             self.set_state(model_id, ModelState.LOADING)
 
             try:
+                if config:
+                    merged = dict(entry.config.config)
+                    merged.update(config)
+                    entry.config.config = merged
+
                 trainer_cls = self._resolve_trainer_class(entry.config.trainer_class)
                 trainer = trainer_cls()
+
+                resolved_path = model_path or entry.config.model_path
+                if resolved_path is not None:
+                    trainer.load(resolved_path)
+                    entry.config.model_path = resolved_path
+
                 entry.trainer = trainer
                 entry.loaded_at = datetime.now(tz=UTC)
                 entry.error_message = None
+                self._auto_save()
                 self.set_state(model_id, ModelState.LOADED)
             except Exception as exc:
                 self.set_state(model_id, ModelState.ERROR, error=str(exc))
                 raise RegistryError(
                     f"Failed to load trainer for model '{model_id}': {exc}"
                 ) from exc
+
+    def attach_trainer(
+        self,
+        model_id: str,
+        trainer: object,
+        model_path: str | None = None,
+        config: dict[str, object] | None = None,
+    ) -> None:
+        """Attach an externally constructed, already-loaded trainer instance.
+
+        This supports lifecycle callers that must build a trainer with
+        constructor arguments the registry cannot infer (for example a
+        :class:`StableBaselines3Trainer` requiring an algorithm, or a
+        pretrained sentiment backend configured from hyperparameters). The
+        caller is responsible for verifying the trainer can perform inference
+        before invoking this method.
+
+        Args:
+            model_id: Identifier of the registered supporting model.
+            trainer: A fully constructed and loaded trainer instance.
+            model_path: Optional artifact path to persist on the entry config.
+            config: Optional configuration overrides merged into the entry
+                configuration.
+
+        Raises:
+            ModelNotFoundError: If the model is not registered.
+        """
+
+        with self._lock:
+            entry = self._require_entry(model_id)
+            self.set_state(model_id, ModelState.LOADING)
+
+            if config:
+                merged = dict(entry.config.config)
+                merged.update(config)
+                entry.config.config = merged
+
+            if model_path is not None:
+                entry.config.model_path = model_path
+
+            entry.trainer = trainer  # type: ignore[assignment]
+            entry.loaded_at = datetime.now(tz=UTC)
+            entry.error_message = None
+            self._auto_save()
+            self.set_state(model_id, ModelState.LOADED)
 
     def unload_model(self, model_id: str) -> None:
         """Unload model trainer instance and mark entry as unloaded."""

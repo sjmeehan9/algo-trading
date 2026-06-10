@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,23 @@ from algotrading.src.reward_functions.reward import reward_factory
 
 class TrainingFactoryError(ValueError):
     """Raised when API training inputs cannot build a runtime object."""
+
+
+@dataclass(slots=True)
+class BuiltTradingEnvironment:
+    """A constructed `TradingEnv` plus the metadata needed to replay it.
+
+    The training path only needs the environment, but the backtesting replay
+    engine also needs the normalized, single-pass market frame and the
+    observation window so it can map each environment step back to the
+    underlying market bar (timestamp and close price) used for fills.
+    """
+
+    env: TradingEnv
+    market_frame: pd.DataFrame
+    observation_window: int
+    symbol: str
+    request: TrainingDataRequest
 
 
 _DEFAULT_STATE_COLUMNS: dict[str, tuple[bool, bool]] = {
@@ -114,6 +132,59 @@ def build_core_rl_environment(
 ) -> TradingEnv:
     """Build a `TradingEnv` for one core RL API training job."""
 
+    return build_trading_environment(
+        model=model,
+        data_config=data_config,
+        data_service=data_service,
+        model_service=model_service,
+        project_root=project_root,
+        single_pass=False,
+    ).env
+
+
+def build_trading_environment(
+    *,
+    model: ModelConfigResponse,
+    data_config: Mapping[str, Any] | None = None,
+    data_service: DataAcquisitionService,
+    model_service: ModelService,
+    project_root: Path | None = None,
+    single_pass: bool = False,
+    request: TrainingDataRequest | None = None,
+) -> BuiltTradingEnvironment:
+    """Build a `TradingEnv` from sourced market data for training or replay.
+
+    This is the shared environment-construction seam used by both Component
+    7.4 training and Component 7.5 backtesting. Training repeats the market
+    frame enough times to satisfy the requested timestep budget. Backtesting
+    requests ``single_pass=True`` so the environment walks each sourced bar
+    exactly once, which is what a deterministic historical replay requires.
+
+    Args:
+        model: Core RL model whose saved data/environment config drives the env.
+        data_config: Job/backtest overrides merged onto the model defaults.
+            Ignored when an explicit ``request`` is supplied.
+        data_service: Phase 7 acquisition service used to source/load bars.
+        model_service: Model service used to validate supporting-model readiness.
+        project_root: Optional override for the project data root.
+        single_pass: When true, build a single-episode environment that visits
+            each sourced bar once (backtest replay). When false, repeat the
+            frame to cover ``total_timesteps`` (training).
+        request: Optional pre-built canonical data request. Backtesting passes
+            the already-merged request (with overridden dates/symbols) so the
+            environment uses the exact same contract as data acquisition rather
+            than re-normalizing a serialized request.
+
+    Returns:
+        The constructed environment plus the normalized market frame,
+        observation window, resolved symbol, and canonical data request.
+
+    Raises:
+        TrainingFactoryError: If the model is not core RL, the data window is
+            too short, the reward function is unsupported, or supporting model
+            inputs are required but not ready.
+    """
+
     if model.model_type != ModelType.CORE_RL:
         raise TrainingFactoryError(
             "Core RL environment construction only supports core_rl models"
@@ -121,10 +192,11 @@ def build_core_rl_environment(
 
     _validate_supporting_inputs_ready(model=model, model_service=model_service)
 
-    request = normalize_training_data_request(
-        model.training_data_config,
-        data_config,
-    )
+    if request is None:
+        request = normalize_training_data_request(
+            model.training_data_config,
+            data_config or {},
+        )
     _validate_single_symbol(request)
 
     data_service.ensure_market_data(request)
@@ -139,18 +211,24 @@ def build_core_rl_environment(
     observation_window = _observation_window(environment_config)
     if len(frame) <= observation_window:
         raise TrainingFactoryError(
-            "Market data window is too short for core RL training: "
+            "Market data window is too short for core RL "
+            f"{'replay' if single_pass else 'training'}: "
             f"{len(frame)} rows are available, but observation_window "
             f"requires more than {observation_window} rows"
         )
 
     base_episode_length = len(frame) - observation_window
-    requested_timesteps = _positive_int_or_none(data_config.get("total_timesteps"))
-    episodes = _episode_count(
-        requested_timesteps=requested_timesteps,
-        episode_length=base_episode_length,
-    )
-    training_frame = _repeat_market_frame(frame, episodes)
+    if single_pass:
+        episodes = 1
+    else:
+        requested_timesteps = _positive_int_or_none(
+            (data_config or {}).get("total_timesteps")
+        )
+        episodes = _episode_count(
+            requested_timesteps=requested_timesteps,
+            episode_length=base_episode_length,
+        )
+    runtime_frame = _repeat_market_frame(frame, episodes)
 
     root = project_root or Path(__file__).resolve().parents[4]
     pipeline = _pipeline_config(
@@ -168,12 +246,18 @@ def build_core_rl_environment(
 
     state_builder = StateBuilder(runtime_config, pipeline, reward)
     state_builder.load_dataframe(
-        training_frame,
+        runtime_frame,
         episode_length=base_episode_length,
         total_timesteps=base_episode_length * episodes,
     )
     state_builder.initialise_state()
-    return TradingEnv(state_builder)
+    return BuiltTradingEnvironment(
+        env=TradingEnv(state_builder),
+        market_frame=frame.reset_index(drop=True).copy(),
+        observation_window=observation_window,
+        symbol=symbol,
+        request=request,
+    )
 
 
 def build_news_sentiment_dataset(

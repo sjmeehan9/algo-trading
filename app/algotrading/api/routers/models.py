@@ -10,6 +10,11 @@ from algotrading.api.schemas.models import (
     ModelConfigUpdate,
     ModelType,
 )
+from algotrading.api.schemas.supporting_lifecycle import (
+    ActivatePretrainedRequest,
+    LoadArtifactRequest,
+    SupportingModelLifecycleResponse,
+)
 from algotrading.api.services import (
     InvalidModelStateError,
     ModelNotFoundError,
@@ -17,9 +22,23 @@ from algotrading.api.services import (
     ModelValidationError,
     get_model_service,
 )
+from algotrading.api.services.supporting_lifecycle_service import (
+    LifecycleOperationError,
+    LifecycleValidationError,
+    SupportingModelLifecycleService,
+    UnsupportedLifecycleModelError,
+)
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 router = APIRouter(prefix="/models", tags=["models"])
+
+
+def get_supporting_lifecycle_service(
+    service: ModelService = Depends(get_model_service),
+) -> SupportingModelLifecycleService:
+    """FastAPI dependency resolver for the supporting lifecycle service."""
+
+    return SupportingModelLifecycleService(model_service=service)
 
 
 def _http_error(
@@ -151,6 +170,107 @@ def list_generations(
         raise _http_error(404, str(exc), "MODEL_NOT_FOUND") from exc
     except ModelValidationError as exc:
         raise _http_error(400, str(exc), "MODEL_VALIDATION_ERROR") from exc
+
+
+@router.get(
+    "/{model_id}/lifecycle",
+    response_model=APIResponse[SupportingModelLifecycleResponse],
+)
+def get_supporting_lifecycle(
+    model_id: str,
+    lifecycle: SupportingModelLifecycleService = Depends(
+        get_supporting_lifecycle_service
+    ),
+) -> APIResponse[SupportingModelLifecycleResponse]:
+    """Return lifecycle state and readiness for a supporting model."""
+
+    try:
+        snapshot = lifecycle.get_lifecycle(model_id)
+    except UnsupportedLifecycleModelError as exc:
+        raise _http_error(409, str(exc), "MODEL_TYPE_UNSUPPORTED") from exc
+    except ModelNotFoundError as exc:
+        raise _http_error(404, str(exc), "MODEL_NOT_FOUND") from exc
+
+    return APIResponse(data=snapshot)
+
+
+@router.post(
+    "/{model_id}/activate-pretrained",
+    response_model=APIResponse[SupportingModelLifecycleResponse],
+)
+def activate_pretrained(
+    model_id: str,
+    request: ActivatePretrainedRequest | None = None,
+    lifecycle: SupportingModelLifecycleService = Depends(
+        get_supporting_lifecycle_service
+    ),
+) -> APIResponse[SupportingModelLifecycleResponse]:
+    """Activate a pretrained supporting ML backend and mark it READY."""
+
+    payload = request or ActivatePretrainedRequest()
+    try:
+        snapshot = lifecycle.activate_pretrained(model_id, payload)
+    except UnsupportedLifecycleModelError as exc:
+        raise _http_error(409, str(exc), "MODEL_TYPE_UNSUPPORTED") from exc
+    except ModelNotFoundError as exc:
+        raise _http_error(404, str(exc), "MODEL_NOT_FOUND") from exc
+    except LifecycleValidationError as exc:
+        raise _http_error(400, str(exc), "LIFECYCLE_VALIDATION_ERROR") from exc
+    except LifecycleOperationError as exc:
+        raise _http_error(409, str(exc), "LIFECYCLE_OPERATION_ERROR") from exc
+
+    return APIResponse(data=snapshot, message="Pretrained model activated")
+
+
+@router.post(
+    "/{model_id}/load-artifact",
+    response_model=APIResponse[SupportingModelLifecycleResponse],
+)
+def load_artifact(
+    model_id: str,
+    request: LoadArtifactRequest,
+    lifecycle: SupportingModelLifecycleService = Depends(
+        get_supporting_lifecycle_service
+    ),
+) -> APIResponse[SupportingModelLifecycleResponse]:
+    """Load and validate an external supporting model artifact."""
+
+    try:
+        snapshot = lifecycle.load_artifact(model_id, request)
+    except UnsupportedLifecycleModelError as exc:
+        raise _http_error(409, str(exc), "MODEL_TYPE_UNSUPPORTED") from exc
+    except ModelNotFoundError as exc:
+        raise _http_error(404, str(exc), "MODEL_NOT_FOUND") from exc
+    except LifecycleValidationError as exc:
+        raise _http_error(400, str(exc), "LIFECYCLE_VALIDATION_ERROR") from exc
+    except LifecycleOperationError as exc:
+        raise _http_error(409, str(exc), "LIFECYCLE_OPERATION_ERROR") from exc
+
+    return APIResponse(data=snapshot, message="Artifact loaded")
+
+
+@router.post(
+    "/{model_id}/unload",
+    response_model=APIResponse[SupportingModelLifecycleResponse],
+)
+def unload_supporting_model(
+    model_id: str,
+    lifecycle: SupportingModelLifecycleService = Depends(
+        get_supporting_lifecycle_service
+    ),
+) -> APIResponse[SupportingModelLifecycleResponse]:
+    """Unload a supporting model trainer and transition to UNLOADED."""
+
+    try:
+        snapshot = lifecycle.unload(model_id)
+    except UnsupportedLifecycleModelError as exc:
+        raise _http_error(409, str(exc), "MODEL_TYPE_UNSUPPORTED") from exc
+    except ModelNotFoundError as exc:
+        raise _http_error(404, str(exc), "MODEL_NOT_FOUND") from exc
+    except LifecycleOperationError as exc:
+        raise _http_error(409, str(exc), "LIFECYCLE_OPERATION_ERROR") from exc
+
+    return APIResponse(data=snapshot, message="Model unloaded")
 
 
 __all__ = ["router"]

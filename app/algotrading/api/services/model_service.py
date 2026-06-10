@@ -53,7 +53,7 @@ _SUPPORTED_TRAINER_ALGORITHMS: dict[str, set[str]] = {
     "stable_baselines3": {"ppo", "dqn", "a2c"},
     "sklearn": {"random_forest", "gradient_boosting", "logistic_regression"},
     "tensorflow": {"lstm", "mlp"},
-    "huggingface": {"transformer_sentiment", "finbert"},
+    "huggingface": {"transformer_sentiment", "finbert", "vader", "provider"},
 }
 
 _HYPERPARAMETER_SCHEMAS: dict[
@@ -276,6 +276,23 @@ class ModelService:
 
         self._validate_no_supporting_inputs(config.input_data_types)
         return self._create_supporting_model(config)
+
+    def get_supporting_entry(self, model_id: str) -> ModelEntry | None:
+        """Return the raw supporting registry entry for a model, if present.
+
+        This exposes the underlying registry entry (including lifecycle state,
+        trainer instance, and artifact path) for lifecycle operations without
+        coercing it through the API response schema.
+
+        Args:
+            model_id: Identifier of the supporting model.
+
+        Returns:
+            The supporting :class:`ModelEntry`, or ``None`` if the ID is not a
+            registered supporting model.
+        """
+
+        return self.supporting_registry.get(model_id)
 
     def get_model(self, model_id: str) -> ModelConfigResponse:
         """Return one model by ID from either core or supporting stores."""

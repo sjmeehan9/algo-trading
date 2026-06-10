@@ -53,6 +53,14 @@ from algotrading.api.services.openai_client import (
     OpenAIClientError,
     OptimizerUnavailableError,
 )
+from algotrading.api.services.supporting_lifecycle_service import (
+    LifecycleOperationError,
+    LifecycleValidationError,
+    SupportingLifecycleError,
+    SupportingModelLifecycleService,
+    UnsupportedLifecycleModelError,
+    get_supporting_lifecycle_service,
+)
 from algotrading.api.services.training_service import (
     TrainingJobNotFoundError,
     TrainingJobStateError,
@@ -104,6 +112,12 @@ __all__ = [
     "OptimizerSuggestionNotFoundError",
     "create_default_optimizer_service",
     "get_optimizer_service",
+    "SupportingModelLifecycleService",
+    "SupportingLifecycleError",
+    "UnsupportedLifecycleModelError",
+    "LifecycleValidationError",
+    "LifecycleOperationError",
+    "get_supporting_lifecycle_service",
     "TrainingService",
     "TrainingServiceError",
     "TrainingJobNotFoundError",

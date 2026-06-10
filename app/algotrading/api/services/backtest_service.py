@@ -794,18 +794,62 @@ def create_default_backtest_service(
     model_service: ModelService,
     project_root: Path | None = None,
     executor: BacktestExecutor | None = None,
+    data_service: object | None = None,
+    api_config: object | None = None,
 ) -> BacktestService:
-    """Build a BacktestService with filesystem-backed defaults."""
+    """Build a BacktestService with model-driven defaults.
+
+    The default executor is the Phase 7 :class:`ModelDrivenBacktestExecutor`,
+    which loads the selected trained generation and derives trades from model
+    predictions over canonical sourced market data. An explicit ``executor``
+    can still be injected (for example by tests), preserving the existing
+    public construction surface.
+    """
 
     root = project_root or Path(__file__).resolve().parents[4]
     data_dir = root / "data" / "api"
     results_path = data_dir / "backtest_results.json"
-    resolved_executor = executor or DefaultBacktestExecutor(data_root=root)
+    resolved_executor = executor or _build_model_driven_executor(
+        model_service=model_service,
+        project_root=root,
+        data_service=data_service,
+        api_config=api_config,
+    )
     return BacktestService(
         model_service=model_service,
         metrics_calculator=MetricsCalculator(),
         executor=resolved_executor,
         results_path=results_path,
+    )
+
+
+def _build_model_driven_executor(
+    *,
+    model_service: ModelService,
+    project_root: Path,
+    data_service: object | None = None,
+    api_config: object | None = None,
+) -> BacktestExecutor:
+    """Construct the default model-driven backtest executor and its deps."""
+
+    from algotrading.api.config import APIConfig
+    from algotrading.api.services.data_acquisition_service import (
+        DataAcquisitionService,
+        create_default_data_acquisition_service,
+    )
+    from algotrading.src.backtesting.model_replay import ModelDrivenBacktestExecutor
+
+    if not isinstance(data_service, DataAcquisitionService):
+        resolved_api_config = api_config if isinstance(api_config, APIConfig) else None
+        data_service = create_default_data_acquisition_service(
+            api_config=resolved_api_config or APIConfig(),
+            project_root=project_root,
+        )
+        data_service._supporting_registry = model_service.supporting_registry
+    return ModelDrivenBacktestExecutor(
+        data_service=data_service,
+        model_service=model_service,
+        project_root=project_root,
     )
 
 
@@ -817,7 +861,13 @@ def get_backtest_service(request: Request) -> BacktestService:
         from algotrading.api.services.model_service import get_model_service
 
         model_service = get_model_service(request)
-        service = create_default_backtest_service(model_service=model_service)
+        data_service = getattr(request.app.state, "data_acquisition_service", None)
+        api_config = getattr(request.app.state, "api_config", None)
+        service = create_default_backtest_service(
+            model_service=model_service,
+            data_service=data_service,
+            api_config=api_config,
+        )
         request.app.state.backtest_service = service
     return service
 
