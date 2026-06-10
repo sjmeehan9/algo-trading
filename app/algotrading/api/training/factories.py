@@ -81,11 +81,27 @@ def build_environment_factory(
     model_service: ModelService,
     project_root: Path | None = None,
 ) -> EnvironmentFactory:
-    """Create the default environment factory used by API RL training jobs."""
+    """Create the default environment factory used by API RL training jobs.
+
+    The returned factory builds a market-data :class:`TradingEnv` for both core
+    RL models (``core_rl``) and supporting RL signal models (``supporting_rl``).
+    Supporting RL models train on the same single-symbol market environment but
+    do not require a configured reward function or supporting model inputs of
+    their own, so the factory supplies safe defaults where the supporting model
+    config omits them.
+    """
 
     root = project_root or Path(__file__).resolve().parents[4]
 
     def _factory(model: ModelConfigResponse, data_config: dict[str, Any]) -> TradingEnv:
+        if model.model_type == ModelType.SUPPORTING_RL:
+            return build_supporting_rl_environment(
+                model=model,
+                data_config=data_config,
+                data_service=data_service,
+                model_service=model_service,
+                project_root=root,
+            )
         return build_core_rl_environment(
             model=model,
             data_config=data_config,
@@ -140,6 +156,99 @@ def build_core_rl_environment(
         project_root=project_root,
         single_pass=False,
     ).env
+
+
+# Default reward used for supporting RL signal models that do not configure a
+# reward function of their own. Supporting RL models learn an action policy over
+# the same market-data environment as core RL, so the standard profit-seeking
+# reward is a safe, fully-implemented default.
+_SUPPORTING_RL_DEFAULT_REWARD = "profit_seeker"
+
+
+def build_supporting_rl_environment(
+    *,
+    model: ModelConfigResponse,
+    data_config: Mapping[str, Any],
+    data_service: DataAcquisitionService,
+    model_service: ModelService,
+    project_root: Path | None = None,
+) -> TradingEnv:
+    """Build a market-data `TradingEnv` for one supporting RL training job.
+
+    Supporting RL models are signal providers trained on a single-symbol market
+    environment. They reuse the core RL environment construction path, but the
+    supporting model registry does not persist a ``reward_function`` or a rich
+    ``environment_config`` the way core models do. This builder injects safe,
+    fully-implemented defaults (a profit-seeking reward and a default
+    observation window) when the supporting model omits them, so a supporting RL
+    job can train and produce a reloadable SB3 artifact through the default API
+    runtime.
+
+    Args:
+        model: Supporting RL model whose training_data_config drives the env.
+        data_config: Job overrides merged onto the model defaults.
+        data_service: Phase 7 acquisition service used to source/load bars.
+        model_service: Model service (unused for supporting RL, kept for parity).
+        project_root: Optional override for the project data root.
+
+    Returns:
+        A constructed market-data :class:`TradingEnv`.
+
+    Raises:
+        TrainingFactoryError: If the model is not supporting RL or the data
+            window is too short for the configured observation window.
+    """
+
+    if model.model_type != ModelType.SUPPORTING_RL:
+        raise TrainingFactoryError(
+            "Supporting RL environment construction only supports supporting_rl "
+            "models"
+        )
+
+    resolved = _resolve_supporting_rl_model(model)
+    return build_trading_environment(
+        model=resolved,
+        data_config=data_config,
+        data_service=data_service,
+        model_service=model_service,
+        project_root=project_root,
+        single_pass=False,
+    ).env
+
+
+def _resolve_supporting_rl_model(
+    model: ModelConfigResponse,
+) -> ModelConfigResponse:
+    """Return a model copy with core-RL-style env defaults for supporting RL.
+
+    The supporting registry stores the model as ``supporting_rl`` with an empty
+    environment config and no reward function. To reuse the shared market-data
+    environment builder (which requires a reward function and core RL type), this
+    produces a derived ``core_rl`` view with defaults filled in. The derived view
+    is only used to construct the training environment; the persisted supporting
+    model and its lifecycle state are unchanged.
+    """
+
+    environment_config = dict(model.environment_config or {})
+    training_config = _mapping(model.training_data_config)
+    config_environment = _mapping(training_config.get("environment_config"))
+    if config_environment:
+        environment_config = {**config_environment, **environment_config}
+
+    reward_function = (
+        model.reward_function
+        or str(training_config.get("reward_function") or "").strip()
+        or _SUPPORTING_RL_DEFAULT_REWARD
+    )
+
+    return model.model_copy(
+        update={
+            "model_type": ModelType.CORE_RL,
+            "reward_function": reward_function,
+            "environment_config": environment_config,
+            "supporting_model_ids": [],
+        }
+    )
 
 
 def build_trading_environment(

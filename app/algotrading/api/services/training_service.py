@@ -12,6 +12,7 @@ from threading import Event, RLock
 from typing import Any
 from uuid import uuid4
 
+from algotrading.api.schemas.models import ModelType
 from algotrading.api.schemas.training import (
     TrainingJob,
     TrainingJobCreate,
@@ -484,12 +485,153 @@ class TrainingService:
                         generation_id,
                     )
 
+        promotion_error = await self._promote_supporting_model_if_needed(
+            model_id=updated.model_id,
+            result=result,
+        )
+        if promotion_error is not None:
+            with self._lock:
+                current = self._jobs.get(job_id)
+                if current is not None:
+                    updated = current.model_copy(
+                        update={"error_message": promotion_error}
+                    )
+                    self._jobs[job_id] = updated
+                    self._persist_jobs_locked()
+
         logger.info(
             "training_job_completed job_id=%s elapsed_seconds=%.2f",
             job_id,
             elapsed_seconds,
         )
         await self._broadcast_job(updated)
+
+    async def _promote_supporting_model_if_needed(
+        self,
+        *,
+        model_id: str,
+        result: TrainingExecutionResult,
+    ) -> str | None:
+        """Promote a supporting model to READY after successful training.
+
+        Supporting ML/RL training only completes the *training* step. The model
+        is not usable for inference (and must not be selectable for core RL)
+        until its freshly saved artifact can be loaded and exercised. This method
+        detects supporting model types, hands the generation artifact to
+        :class:`SupportingModelLifecycleService`, and only the lifecycle service's
+        load/validate path transitions the registry entry to ``READY``.
+
+        The training job itself remains ``COMPLETED`` regardless of promotion
+        outcome (training did finish); a promotion failure is surfaced as the
+        job's ``error_message`` and leaves the supporting registry entry in
+        ``ERROR`` (or its prior non-ready state) with a clear message, so the
+        model is not silently advertised as ready.
+
+        Args:
+            model_id: Identifier of the trained model.
+            result: The successful training execution result, whose
+                ``model_path`` points at the saved artifact.
+
+        Returns:
+            ``None`` when no promotion was required or promotion succeeded;
+            otherwise a human-readable error message describing why the
+            supporting model could not be made ready.
+        """
+
+        try:
+            model = self._model_service.get_model(model_id)
+        except ModelNotFoundError:
+            return None
+
+        if model.model_type not in (
+            ModelType.SUPPORTING_ML,
+            ModelType.SUPPORTING_RL,
+        ):
+            return None
+
+        if not result.model_path:
+            message = (
+                "Supporting training completed but produced no artifact path; "
+                "the model cannot be loaded for inference and was not marked "
+                "ready"
+            )
+            self._mark_supporting_error(model_id, message)
+            logger.error("supporting_promotion_no_artifact model_id=%s", model_id)
+            return message
+
+        # Imported lazily to avoid a circular import with the lifecycle service,
+        # which depends on the model service that constructs this service.
+        from algotrading.api.schemas.supporting_lifecycle import LoadArtifactRequest
+        from algotrading.api.services.supporting_lifecycle_service import (
+            SupportingLifecycleError,
+            SupportingModelLifecycleService,
+        )
+
+        lifecycle_service = SupportingModelLifecycleService(
+            model_service=self._model_service
+        )
+
+        try:
+            await asyncio.to_thread(
+                lifecycle_service.load_artifact,
+                model_id,
+                LoadArtifactRequest(model_path=result.model_path),
+            )
+        except SupportingLifecycleError as exc:
+            message = (
+                "Supporting training completed but the saved artifact could not "
+                f"be loaded for inference: {exc}"
+            )
+            logger.error(
+                "supporting_promotion_failed model_id=%s error=%s", model_id, exc
+            )
+            return message
+        except Exception as exc:  # pragma: no cover - defensive guard
+            message = (
+                "Supporting training completed but readiness validation failed: "
+                f"{exc}"
+            )
+            self._mark_supporting_error(model_id, str(exc))
+            logger.exception(
+                "supporting_promotion_unexpected_error model_id=%s", model_id
+            )
+            return message
+
+        await self._broadcast_model_state(model_id)
+        logger.info("supporting_promotion_ready model_id=%s", model_id)
+        return None
+
+    async def _broadcast_model_state(self, model_id: str) -> None:
+        """Broadcast the refreshed model configuration after a state change.
+
+        Emitting the updated model (including its new lifecycle ``state``) lets
+        subscribed clients refresh the training selector and any readiness views
+        without waiting for a manual reload.
+        """
+
+        try:
+            model = self._model_service.get_model(model_id)
+        except ModelNotFoundError:
+            return
+
+        payload = model.model_dump(mode="json")
+        await self._ws_manager.broadcast_to_topic(f"models:{model_id}", payload)
+        await self._ws_manager.broadcast_to_topic(f"training:model:{model_id}", payload)
+
+    def _mark_supporting_error(self, model_id: str, message: str) -> None:
+        """Best-effort transition of a supporting entry to ERROR state."""
+
+        try:
+            from algotrading.src.models.registry import ModelState
+
+            self._model_service.supporting_registry.set_state(
+                model_id, ModelState.ERROR, error=message
+            )
+        except Exception:  # pragma: no cover - defensive guard
+            logger.debug(
+                "Could not mark supporting model '%s' ERROR after promotion failure",
+                model_id,
+            )
 
     async def mark_failed(self, job_id: str, error_message: str) -> None:
         """Mark a job as failed with the provided error message."""

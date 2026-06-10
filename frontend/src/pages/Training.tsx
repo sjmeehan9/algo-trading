@@ -4,7 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { modelsApi, type ModelConfigResponse } from '../api/models';
-import { trainingApi, type GenerationSummary, type TrainingJob } from '../api/training';
+import {
+  formatModelType,
+  isTrainableModelType,
+  trainingApi,
+  type GenerationSummary,
+  type TrainingJob,
+} from '../api/training';
 import ActiveJobCard from '../components/training/ActiveJobCard';
 import HyperparameterSuggestions from '../components/optimizer/HyperparameterSuggestions';
 import GenerationComparisonChart from '../components/training/GenerationComparisonChart';
@@ -23,6 +29,10 @@ const createModelNameMap = (models: ModelConfigResponse[]): Map<string, string> 
 
 const getModelName = (modelNames: Map<string, string>, modelId: string): string =>
   modelNames.get(modelId) ?? modelId;
+
+/** Build the visible selector label for a training model option. */
+const getModelOptionLabel = (model: ModelConfigResponse): string =>
+  `${model.name} — ${formatModelType(model.model_type)} · ${model.state}`;
 
 const getSelectedGenerations = (
   generations: GenerationSummary[],
@@ -43,8 +53,11 @@ export default function Training(): JSX.Element {
   const [selectedGenerationIds, setSelectedGenerationIds] = useState<string[]>([]);
 
   const modelsQuery = useQuery({
-    queryKey: ['models', 'core_rl', 'training-dashboard'],
-    queryFn: () => modelsApi.list({ modelType: 'core_rl', pageSize: 100 }),
+    queryKey: ['models', 'trainable', 'training-dashboard'],
+    queryFn: () => modelsApi.list({ pageSize: 100 }),
+    // Poll so a supporting model promoted to `ready` by a completed training
+    // job appears as selectable without a manual page reload.
+    refetchInterval: 10_000,
   });
   const runningJobsQuery = useQuery({
     queryKey: ['training-jobs', 'running'],
@@ -67,7 +80,10 @@ export default function Training(): JSX.Element {
     enabled: Boolean(selectedModelId),
   });
 
-  const models = useMemo(() => modelsQuery.data?.items ?? [], [modelsQuery.data]);
+  const models = useMemo(
+    () => (modelsQuery.data?.items ?? []).filter((model) => isTrainableModelType(model.model_type)),
+    [modelsQuery.data],
+  );
   const modelNames = useMemo(() => createModelNameMap(models), [models]);
   const activeJobs = runningJobsQuery.data ?? [];
   const queuedJobs = queuedJobsQuery.data ?? [];
@@ -94,6 +110,9 @@ export default function Training(): JSX.Element {
       queryClient.invalidateQueries({ queryKey: ['training-jobs', 'running'] }),
       queryClient.invalidateQueries({ queryKey: ['training-jobs', 'queued'] }),
       queryClient.invalidateQueries({ queryKey: ['training-jobs', 'recent'] }),
+      // Refresh the trainable-model selector so a supporting model promoted to
+      // `ready` by training surfaces its updated lifecycle state.
+      queryClient.invalidateQueries({ queryKey: ['models', 'trainable', 'training-dashboard'] }),
       ...(modelId ? [queryClient.invalidateQueries({ queryKey: ['generations', modelId] })] : []),
     ]);
   };
@@ -186,7 +205,8 @@ export default function Training(): JSX.Element {
           <div>
             <h3 className="font-semibold text-ink">Start training</h3>
             <p className="mt-1 text-sm text-stone-600">
-              Queue a new generation for a configured core RL model.
+              Queue a new generation for a configured core RL, supporting ML, or supporting RL
+              model.
             </p>
           </div>
           <Link className="secondary-button" to="/models/new">
@@ -198,7 +218,7 @@ export default function Training(): JSX.Element {
           <LoadingSpinner />
         ) : models.length === 0 ? (
           <div className="rounded-md border border-dashed border-stone-300 px-4 py-8 text-center text-sm text-stone-500">
-            No core RL model configurations are available.
+            No trainable model configurations are available.
           </div>
         ) : (
           <form
@@ -220,7 +240,7 @@ export default function Training(): JSX.Element {
               >
                 {models.map((model) => (
                   <option key={model.model_id} value={model.model_id}>
-                    {model.name}
+                    {getModelOptionLabel(model)}
                   </option>
                 ))}
               </select>
@@ -332,7 +352,7 @@ export default function Training(): JSX.Element {
               {models.length === 0 && <option value="">No models</option>}
               {models.map((model) => (
                 <option key={model.model_id} value={model.model_id}>
-                  {model.name}
+                  {getModelOptionLabel(model)}
                 </option>
               ))}
             </select>

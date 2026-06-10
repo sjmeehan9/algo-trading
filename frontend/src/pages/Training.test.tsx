@@ -8,6 +8,7 @@ import type { PaginatedResponse } from '../api/client';
 import { modelsApi, type ModelConfigResponse } from '../api/models';
 import { optimizerApi } from '../api/optimizer';
 import { trainingApi, type GenerationSummary, type TrainingJob } from '../api/training';
+import type * as TrainingModule from '../api/training';
 import { wsClient } from '../api/websocket';
 import Training from './Training';
 
@@ -17,15 +18,19 @@ vi.mock('../api/models', () => ({
   },
 }));
 
-vi.mock('../api/training', () => ({
-  trainingApi: {
-    listJobs: vi.fn(),
-    createJob: vi.fn(),
-    cancelJob: vi.fn(),
-    reorderQueue: vi.fn(),
-    listGenerations: vi.fn(),
-  },
-}));
+vi.mock('../api/training', async () => {
+  const actual = await vi.importActual<typeof TrainingModule>('../api/training');
+  return {
+    ...actual,
+    trainingApi: {
+      listJobs: vi.fn(),
+      createJob: vi.fn(),
+      cancelJob: vi.fn(),
+      reorderQueue: vi.fn(),
+      listGenerations: vi.fn(),
+    },
+  };
+});
 
 vi.mock('../api/optimizer', () => ({
   optimizerApi: {
@@ -67,6 +72,34 @@ const secondCoreModel: ModelConfigResponse = {
   model_id: 'core-2',
   name: 'Core DQN',
   algorithm: 'dqn',
+};
+
+const supportingMlModel: ModelConfigResponse = {
+  ...coreModel,
+  model_id: 'support-ml-1',
+  name: 'News Sentiment',
+  model_type: 'supporting_ml',
+  signal_type: 'sentiment',
+  trainer_type: 'sklearn',
+  algorithm: 'random_forest',
+  reward_function: null,
+  input_data_types: ['news_text'],
+  input_frequency: 'irregular',
+  state: 'registered',
+};
+
+const supportingRlModel: ModelConfigResponse = {
+  ...coreModel,
+  model_id: 'support-rl-1',
+  name: 'Trend Signal',
+  model_type: 'supporting_rl',
+  signal_type: 'trend',
+  trainer_type: 'stable_baselines3',
+  algorithm: 'ppo',
+  reward_function: null,
+  input_data_types: ['market_bar'],
+  input_frequency: '1m',
+  state: 'ready',
 };
 
 const runningJob: TrainingJob = {
@@ -164,7 +197,9 @@ describe('Training', () => {
 
   beforeEach(() => {
     websocketHandlers = new Map();
-    vi.mocked(modelsApi.list).mockResolvedValue(createPaginated([coreModel, secondCoreModel]));
+    vi.mocked(modelsApi.list).mockResolvedValue(
+      createPaginated([coreModel, secondCoreModel, supportingMlModel, supportingRlModel]),
+    );
     vi.mocked(trainingApi.listJobs).mockImplementation(async (params) => {
       if (params?.status === 'running') {
         return [runningJob];
@@ -213,6 +248,29 @@ describe('Training', () => {
     expect(await screen.findByText(/Progress: 50.0%/)).toBeInTheDocument();
     expect(screen.getByText('12.50')).toBeInTheDocument();
     expect(screen.getByText('0.4200')).toBeInTheDocument();
+  });
+
+  it('includes supporting ML and RL models in the training selector with state and type', async () => {
+    renderTraining();
+
+    const selector = (await screen.findByLabelText(/Training model/)) as HTMLSelectElement;
+    const optionText = Array.from(selector.options).map((option) => option.textContent ?? '');
+
+    expect(optionText).toEqual(
+      expect.arrayContaining([
+        'Core PPO — Core RL · configured',
+        'News Sentiment — Supporting ML · registered',
+        'Trend Signal — Supporting RL · ready',
+      ]),
+    );
+
+    // The supporting model entries expose both their type and lifecycle state.
+    expect(
+      optionText.some((text) => text.includes('Supporting ML') && text.includes('registered')),
+    ).toBe(true);
+    expect(
+      optionText.some((text) => text.includes('Supporting RL') && text.includes('ready')),
+    ).toBe(true);
   });
 
   it('starts a new training job from the dashboard', async () => {

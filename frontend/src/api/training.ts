@@ -1,6 +1,34 @@
 import { apiClient, type PaginatedResponse } from './client';
+import type { ModelType } from './models';
 
 export type TrainingJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+/**
+ * Model types that can be trained or fine-tuned through the Training Dashboard.
+ *
+ * Phase 7 Component 7.8 extends the dashboard beyond `core_rl` so operators can
+ * also train supporting ML/RL models and drive them to a ready, selectable state
+ * for core RL configuration.
+ */
+export const TRAINABLE_MODEL_TYPES: readonly ModelType[] = [
+  'core_rl',
+  'supporting_ml',
+  'supporting_rl',
+];
+
+const MODEL_TYPE_LABELS: Record<ModelType, string> = {
+  core_rl: 'Core RL',
+  supporting_ml: 'Supporting ML',
+  supporting_rl: 'Supporting RL',
+};
+
+/** Return whether a model type can be queued for training. */
+export const isTrainableModelType = (modelType: ModelType): boolean =>
+  TRAINABLE_MODEL_TYPES.includes(modelType);
+
+/** Return a human-readable label for a model type used in the selector. */
+export const formatModelType = (modelType: ModelType): string =>
+  MODEL_TYPE_LABELS[modelType] ?? modelType;
 
 export interface TrainingMetrics {
   episode_reward?: number;

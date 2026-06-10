@@ -20,6 +20,10 @@ from algotrading.api.services import training_service as training_service_module
 from algotrading.api.services.data_acquisition_service import (
     create_default_data_acquisition_service,
 )
+from algotrading.api.services.model_service import (
+    InvalidModelStateError,
+    ModelValidationError,
+)
 from algotrading.api.services.training_service import TrainingService
 from algotrading.api.training.factories import (
     TrainingFactoryError,
@@ -39,6 +43,7 @@ from algotrading.src.data_pipeline.storage import LocalDataStore
 from algotrading.src.data_pipeline.types import NewsRecord
 from algotrading.src.models.registry import (
     CustomStrategyRegistry,
+    ModelState,
     SupportingModelRegistry,
 )
 from algotrading.src.models.signals import SignalType
@@ -159,6 +164,34 @@ def _create_supporting_ml_model(
             training_data_config=training_data_config or {},
             input_data_types=["news_text"],
             input_frequency="irregular",
+        )
+    )
+    return response.model_id
+
+
+def _create_supporting_rl_model(
+    service: ModelService,
+    training_data_config: dict[str, object],
+) -> str:
+    """Persist a supporting RL signal model and return its ID."""
+
+    response = service.create_model(
+        ModelConfigCreate(
+            name="API Supporting RL",
+            model_type=ModelType.SUPPORTING_RL,
+            signal_type=SignalType.TREND,
+            trainer_type="stable_baselines3",
+            algorithm="ppo",
+            hyperparameters={
+                "learning_rate": 0.0003,
+                "n_steps": 4,
+                "batch_size": 4,
+                "n_epochs": 1,
+                "model_policy": "MultiInputPolicy",
+            },
+            training_data_config=training_data_config,
+            input_data_types=["market_bar"],
+            input_frequency="1m",
         )
     )
     return response.model_id
@@ -640,6 +673,283 @@ def test_default_service_trains_supporting_ml_with_labeled_dataset(
         loaded = NewsSentimentTrainer(model_id=model_id)
         loaded.load(str(model_path))
         assert loaded.is_trained
+
+
+def test_default_service_promotes_supporting_ml_to_ready_after_training(
+    tmp_path: Path,
+) -> None:
+    """Training a supporting sentiment model promotes it to READY for selection.
+
+    This is the Component 7.8 happy path: a supporting ML model is created,
+    trained through the default API runtime with a tiny labeled dataset, and the
+    lifecycle service consumes the saved generation artifact to mark the
+    supporting registry entry ``ready`` with a persisted ``model_path``. A core
+    RL model can then reference the supporting model without any manual registry
+    edits.
+    """
+
+    config = APIConfig(
+        api_key="training-secret-key",
+        debug=True,
+        cors_origins=["http://localhost:3000"],
+    )
+    app = create_app(config)
+
+    model_service = _build_model_service(tmp_path)
+    app.state.model_service = model_service
+    dataset_path = _write_sentiment_csv(tmp_path / "raw" / "sentiment.csv")
+    model_id = _create_supporting_ml_model(model_service)
+
+    # The model is configured but not yet ready, so core RL must reject it.
+    assert model_service.get_model(model_id).state != ModelState.READY.value
+    with pytest.raises((ModelValidationError, InvalidModelStateError)):
+        model_service._validate_supporting_model_ids([model_id])
+
+    app.state.training_service = (
+        training_service_module.create_default_training_service(
+            ws_manager=app.state.ws_manager,
+            model_service=model_service,
+            project_root=tmp_path,
+            api_config=config,
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/training/jobs",
+            headers=_auth_headers(),
+            json={
+                "model_id": model_id,
+                "total_timesteps": 1,
+                "data_config": {"labeled_dataset_path": str(dataset_path)},
+            },
+        )
+        assert response.status_code == 201, response.text
+        job_id = response.json()["data"]["job_id"]
+
+        completed = _wait_for_status(
+            client,
+            job_id,
+            TrainingJobStatus.COMPLETED.value,
+            timeout=15.0,
+        )
+        assert completed["generation_id"] is not None
+        assert not completed["error_message"]
+
+        # Poll the model endpoint until the lifecycle promotion has persisted.
+        deadline = time.time() + 5.0
+        model_state = ""
+        while time.time() < deadline:
+            model_response = client.get(
+                f"/api/v1/models/{model_id}", headers=_auth_headers()
+            )
+            assert model_response.status_code == 200, model_response.text
+            model_state = model_response.json()["data"]["state"]
+            if model_state == ModelState.READY.value:
+                break
+            time.sleep(0.05)
+        assert model_state == ModelState.READY.value
+
+        # The supporting registry entry now records the artifact path.
+        entry = model_service.get_supporting_entry(model_id)
+        assert entry is not None
+        assert entry.state == ModelState.READY
+        assert entry.config.model_path is not None
+        assert Path(entry.config.model_path).exists()
+
+        # The generation also records a usable artifact path.
+        generation_response = client.get(
+            f"/api/v1/generations/{completed['generation_id']}",
+            headers=_auth_headers(),
+        )
+        assert generation_response.status_code == 200, generation_response.text
+        generation = generation_response.json()["data"]
+        assert Path(generation["model_path"]).exists()
+
+        # A core RL model can now reference the supporting model with no manual
+        # registry edits.
+        core = model_service.create_model(
+            ModelConfigCreate(
+                name="Core With Sentiment",
+                model_type=ModelType.CORE_RL,
+                trainer_type="stable_baselines3",
+                algorithm="ppo",
+                hyperparameters={"learning_rate": 0.0003},
+                training_data_config={},
+                supporting_model_ids=[model_id],
+                strategy_ids=[],
+                environment_config={},
+                reward_function="profit_seeker",
+            )
+        )
+        assert model_id in core.supporting_model_ids
+
+
+def test_default_service_trains_supporting_rl_to_ready(tmp_path: Path) -> None:
+    """A supporting RL model trains on market data and promotes to READY.
+
+    Supporting RL signal models reuse the market-data environment builder, save
+    a reloadable SB3 ``.zip`` artifact, and are promoted to READY through the
+    lifecycle service's load/validate path, matching the artifact shape expected
+    by ``StableBaselines3Trainer.load(...)``.
+    """
+
+    config = APIConfig(
+        api_key="training-secret-key",
+        debug=True,
+        cors_origins=["http://localhost:3000"],
+    )
+    app = create_app(config)
+
+    model_service = _build_model_service(tmp_path)
+    app.state.model_service = model_service
+
+    market_path = tmp_path / "raw" / "spy-rl.csv"
+    start, end = _write_market_csv(market_path)
+    model_id = _create_supporting_rl_model(
+        model_service,
+        training_data_config={
+            "symbols": ["SPY"],
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "data_frequency": "1m",
+            "market": {
+                "provider": "file",
+                "explicit_files": {"SPY": str(market_path)},
+            },
+            "environment_config": {"observation_window": 4},
+        },
+    )
+
+    app.state.training_service = (
+        training_service_module.create_default_training_service(
+            ws_manager=app.state.ws_manager,
+            model_service=model_service,
+            project_root=tmp_path,
+            api_config=config,
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/training/jobs",
+            headers=_auth_headers(),
+            json={"model_id": model_id, "total_timesteps": 8},
+        )
+        assert response.status_code == 201, response.text
+        job_id = response.json()["data"]["job_id"]
+
+        completed = _wait_for_status(
+            client,
+            job_id,
+            TrainingJobStatus.COMPLETED.value,
+            timeout=30.0,
+        )
+        assert completed["generation_id"] is not None
+        assert not completed["error_message"]
+
+        deadline = time.time() + 5.0
+        model_state = ""
+        while time.time() < deadline:
+            model_response = client.get(
+                f"/api/v1/models/{model_id}", headers=_auth_headers()
+            )
+            assert model_response.status_code == 200, model_response.text
+            model_state = model_response.json()["data"]["state"]
+            if model_state == ModelState.READY.value:
+                break
+            time.sleep(0.05)
+        assert model_state == ModelState.READY.value
+
+        entry = model_service.get_supporting_entry(model_id)
+        assert entry is not None
+        assert entry.state == ModelState.READY
+        assert entry.config.model_path is not None
+
+        artifact = Path(entry.config.model_path)
+        assert artifact.exists()
+        reloaded = StableBaselines3Trainer(algorithm=SB3Algorithm.PPO)
+        reloaded.load(str(artifact))
+        assert reloaded.is_trained
+
+
+def test_default_service_marks_supporting_ml_error_on_missing_artifact(
+    tmp_path: Path,
+) -> None:
+    """A failed supporting promotion leaves a clear error and a non-ready state.
+
+    When training completes but produces no loadable artifact, the supporting
+    model must not be advertised as ready. The job surfaces a clear message and
+    the registry entry stays out of ``READY``.
+    """
+
+    config = APIConfig(
+        api_key="training-secret-key",
+        debug=True,
+        cors_origins=["http://localhost:3000"],
+    )
+    app = create_app(config)
+
+    model_service = _build_model_service(tmp_path)
+    app.state.model_service = model_service
+    model_id = _create_supporting_ml_model(model_service)
+
+    class _NoArtifactExecutor:
+        """Executor that completes training but returns no artifact path."""
+
+        def execute(self, context: TrainingJobContext) -> TrainingExecutionResult:
+            context.progress_callback(
+                TrainingProgressUpdate(
+                    current_timestep=1,
+                    total_timesteps=1,
+                    current_metrics={"phase": "done"},
+                )
+            )
+            training_metrics = TrainingMetrics(
+                final_reward=0.0,
+                mean_reward=0.0,
+                std_reward=0.0,
+                episodes_completed=1,
+                timesteps_trained=1,
+                training_time_seconds=0.01,
+            )
+            return TrainingExecutionResult(
+                timesteps_trained=1,
+                final_metrics={"epochs_trained": 1},
+                training_metrics=training_metrics,
+                model_path=None,
+            )
+
+    worker = TrainingWorker(executor=_NoArtifactExecutor())
+    app.state.training_service = TrainingService(
+        ws_manager=app.state.ws_manager,
+        model_service=model_service,
+        generation_tracker=model_service.generation_tracker,
+        worker=worker,
+        jobs_path=tmp_path / "training_jobs.json",
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/training/jobs",
+            headers=_auth_headers(),
+            json={"model_id": model_id, "total_timesteps": 1},
+        )
+        assert response.status_code == 201, response.text
+        job_id = response.json()["data"]["job_id"]
+
+        completed = _wait_for_status(
+            client,
+            job_id,
+            TrainingJobStatus.COMPLETED.value,
+            timeout=10.0,
+        )
+        assert completed["error_message"]
+        assert "not marked ready" in completed["error_message"]
+
+        entry = model_service.get_supporting_entry(model_id)
+        assert entry is not None
+        assert entry.state != ModelState.READY
 
 
 def test_news_sentiment_dataset_uses_canonical_news_labels(tmp_path: Path) -> None:
