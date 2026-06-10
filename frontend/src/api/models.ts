@@ -47,6 +47,43 @@ export interface ListModelsParams {
   pageSize?: number;
 }
 
+/** One named readiness check contributing to a supporting model's readiness. */
+export interface ReadinessCheck {
+  name: string;
+  passed: boolean;
+  detail?: string | null;
+}
+
+/**
+ * Lifecycle state snapshot for a supporting model.
+ *
+ * Mirrors the backend `SupportingModelLifecycleResponse` returned by
+ * `GET /api/v1/models/{model_id}/lifecycle`.
+ */
+export interface SupportingModelLifecycleResponse {
+  model_id: string;
+  model_type: ModelType;
+  state: ModelState;
+  model_path?: string | null;
+  trainer_class: string;
+  input_data_types: string[];
+  signal_type: string;
+  algorithm?: string | null;
+  last_error?: string | null;
+  is_ready: boolean;
+  readiness_checks: ReadinessCheck[];
+}
+
+/** Optional hyperparameter overrides applied when activating a pretrained backend. */
+export interface ActivatePretrainedRequest {
+  hyperparameters?: Record<string, HyperparameterValue>;
+}
+
+/** Request body to load and validate an external supporting model artifact. */
+export interface LoadArtifactRequest {
+  model_path: string;
+}
+
 export interface StrategyInfo {
   strategy_id: string;
   name: string;
@@ -90,6 +127,38 @@ export const modelsApi = {
 
   remove(modelId: string): Promise<void> {
     return apiClient.delete<void>(`/models/${encodeURIComponent(modelId)}`);
+  },
+
+  getLifecycle(modelId: string): Promise<SupportingModelLifecycleResponse> {
+    return apiClient.get<SupportingModelLifecycleResponse>(
+      `/models/${encodeURIComponent(modelId)}/lifecycle`,
+    );
+  },
+
+  activatePretrained(
+    modelId: string,
+    request: ActivatePretrainedRequest = {},
+  ): Promise<SupportingModelLifecycleResponse> {
+    return apiClient.post<SupportingModelLifecycleResponse>(
+      `/models/${encodeURIComponent(modelId)}/activate-pretrained`,
+      request,
+    );
+  },
+
+  loadArtifact(
+    modelId: string,
+    request: LoadArtifactRequest,
+  ): Promise<SupportingModelLifecycleResponse> {
+    return apiClient.post<SupportingModelLifecycleResponse>(
+      `/models/${encodeURIComponent(modelId)}/load-artifact`,
+      request,
+    );
+  },
+
+  unload(modelId: string): Promise<SupportingModelLifecycleResponse> {
+    return apiClient.post<SupportingModelLifecycleResponse>(
+      `/models/${encodeURIComponent(modelId)}/unload`,
+    );
   },
 };
 

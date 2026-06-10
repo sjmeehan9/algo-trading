@@ -293,7 +293,11 @@ export const useModelForm = (
     mutationFn: (formData: CoreRLModelFormData) =>
       modelsApi.create(coreRLFormDataToCreatePayload(formData)),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['models'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['models'] }),
+        // Keep the supporting-input selector consistent with the latest models.
+        queryClient.invalidateQueries({ queryKey: ['core-rl-input-options'] }),
+      ]);
     },
   });
 
@@ -305,8 +309,11 @@ export const useModelForm = (
       return modelsApi.update(modelId, coreRLFormDataToUpdatePayload(formData));
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['models'] });
-      await queryClient.invalidateQueries({ queryKey: ['models', modelId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['models'] }),
+        queryClient.invalidateQueries({ queryKey: ['models', modelId] }),
+        queryClient.invalidateQueries({ queryKey: ['core-rl-input-options'] }),
+      ]);
     },
   });
 

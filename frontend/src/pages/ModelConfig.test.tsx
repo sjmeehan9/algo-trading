@@ -20,6 +20,10 @@ vi.mock('../api/models', () => ({
     get: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    getLifecycle: vi.fn(),
+    activatePretrained: vi.fn(),
+    loadArtifact: vi.fn(),
+    unload: vi.fn(),
   },
   strategiesApi: {
     list: vi.fn(),
@@ -150,6 +154,32 @@ describe('ModelConfig', () => {
       ...existingModel,
       name: 'Existing DQN Updated',
     });
+    vi.mocked(modelsApi.getLifecycle).mockResolvedValue({
+      model_id: 'supporting-ml-1',
+      model_type: 'supporting_ml',
+      state: 'registered',
+      model_path: null,
+      trainer_class: 'NewsSentimentTrainer',
+      input_data_types: ['news_text'],
+      signal_type: 'sentiment',
+      algorithm: 'transformer_sentiment',
+      last_error: null,
+      is_ready: false,
+      readiness_checks: [{ name: 'trainer_loaded', passed: false, detail: 'No trainer loaded' }],
+    });
+    vi.mocked(modelsApi.activatePretrained).mockResolvedValue({
+      model_id: 'supporting-ml-1',
+      model_type: 'supporting_ml',
+      state: 'ready',
+      model_path: 'data/models/news_sentiment',
+      trainer_class: 'NewsSentimentTrainer',
+      input_data_types: ['news_text'],
+      signal_type: 'sentiment',
+      algorithm: 'transformer_sentiment',
+      last_error: null,
+      is_ready: true,
+      readiness_checks: [{ name: 'trainer_loaded', passed: true, detail: 'Trainer attached' }],
+    });
   });
 
   it('creates a core RL model with supporting model and strategy inputs', async () => {
@@ -224,6 +254,40 @@ describe('ModelConfig', () => {
       supporting_model_ids: ['supporting-ml-1'],
       strategy_ids: ['strategy-1'],
     });
+  });
+
+  it('shows the lifecycle panel and activates a pretrained supporting model when editing', async () => {
+    vi.mocked(modelsApi.get).mockResolvedValue(supportingModel);
+    const user = userEvent.setup();
+    renderModelConfig('/models/supporting-ml-1');
+
+    // The lifecycle panel renders alongside the supporting model edit form.
+    expect(await screen.findByRole('region', { name: /Supporting model lifecycle/ })).toBeInTheDocument();
+    await screen.findByText('No artifact loaded');
+
+    const activateButton = screen.getByRole('button', { name: /Activate pretrained/ });
+    expect(activateButton).toBeEnabled();
+
+    // After activation the backend reports the ready state on the next read.
+    vi.mocked(modelsApi.getLifecycle).mockResolvedValue({
+      model_id: 'supporting-ml-1',
+      model_type: 'supporting_ml',
+      state: 'ready',
+      model_path: 'data/models/news_sentiment',
+      trainer_class: 'NewsSentimentTrainer',
+      input_data_types: ['news_text'],
+      signal_type: 'sentiment',
+      algorithm: 'transformer_sentiment',
+      last_error: null,
+      is_ready: true,
+      readiness_checks: [{ name: 'trainer_loaded', passed: true, detail: 'Trainer attached' }],
+    });
+    await user.click(activateButton);
+
+    await waitFor(() =>
+      expect(modelsApi.activatePretrained).toHaveBeenCalledWith('supporting-ml-1', {}),
+    );
+    expect(await screen.findByText('data/models/news_sentiment')).toBeInTheDocument();
   });
 
   it('creates a supporting ML model without supporting model inputs', async () => {

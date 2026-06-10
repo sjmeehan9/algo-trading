@@ -6,6 +6,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import CoreRLModelForm from '../components/models/CoreRLModelForm';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import SupportingModelForm from '../components/models/SupportingModelForm';
+import SupportingModelLifecyclePanel from '../components/models/SupportingModelLifecyclePanel';
 import { modelsApi } from '../api/models';
 import { type CoreRLModelFormData, useModelForm } from '../hooks/useModelForm';
 import {
@@ -40,6 +41,13 @@ export default function ModelConfig(): JSX.Element {
     loadedModelType === 'supporting_ml' ||
     loadedModelType === 'supporting_rl';
   const isCoreForm = !isSupportingForm;
+  // The lifecycle panel only applies to a persisted supporting model being
+  // edited (not the supporting create route, which has no model yet).
+  const lifecycleModel =
+    !isSupportingCreateRoute &&
+    (loadedModelType === 'supporting_ml' || loadedModelType === 'supporting_rl')
+      ? modelTypeQuery.data
+      : undefined;
 
   const coreForm = useModelForm(editableModelId, { enabled: isCoreForm });
   const supportingForm = useSupportingModelForm(editableModelId, { enabled: isSupportingForm });
@@ -96,16 +104,19 @@ export default function ModelConfig(): JSX.Element {
       )}
 
       {!isLoadingInitialData && !activeLoadError && isSupportingForm && (
-        <SupportingModelForm
-          initialData={supportingForm.initialData}
-          isLoading={supportingForm.isSaving}
-          submitLabel={
-            supportingForm.isEditMode ? 'Update Supporting Model' : 'Create Supporting Model'
-          }
-          errorMessage={supportingForm.saveError}
-          onCancel={() => navigate('/models')}
-          onSubmit={handleSupportingSubmit}
-        />
+        <>
+          {lifecycleModel && <SupportingModelLifecyclePanel model={lifecycleModel} />}
+          <SupportingModelForm
+            initialData={supportingForm.initialData}
+            isLoading={supportingForm.isSaving}
+            submitLabel={
+              supportingForm.isEditMode ? 'Update Supporting Model' : 'Create Supporting Model'
+            }
+            errorMessage={supportingForm.saveError}
+            onCancel={() => navigate('/models')}
+            onSubmit={handleSupportingSubmit}
+          />
+        </>
       )}
 
       {!isLoadingInitialData && !activeLoadError && !isSupportingForm && (

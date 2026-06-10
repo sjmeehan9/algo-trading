@@ -24,12 +24,34 @@ import {
 } from '../constants/dataTypes';
 import {
   modelsApi,
+  type ActivatePretrainedRequest,
+  type HyperparameterValue as ModelHyperparameterValue,
+  type LoadArtifactRequest,
   type ModelConfigCreate,
   type ModelConfigResponse,
   type ModelConfigUpdate,
+  type SupportingModelLifecycleResponse,
 } from '../api/models';
 
 export type SupportingModelCategory = 'ml' | 'rl';
+
+/**
+ * Sentiment-style algorithms that map onto a concrete pretrained backend in the
+ * Component 7.7 lifecycle service. Only these support `activate-pretrained`; any
+ * other algorithm must be trained or have an artifact loaded instead.
+ */
+export const PRETRAINED_SENTIMENT_ALGORITHMS: readonly string[] = [
+  'transformer_sentiment',
+  'finbert',
+  'vader',
+  'provider',
+  'provider_passthrough',
+];
+
+/** Return whether an algorithm can be activated as a pretrained sentiment backend. */
+export const supportsPretrainedActivation = (algorithm: string | null | undefined): boolean =>
+  Boolean(algorithm) &&
+  PRETRAINED_SENTIMENT_ALGORITHMS.includes(String(algorithm).trim().toLowerCase());
 
 const hyperparameterValueSchema = z.union([z.number(), z.string(), z.boolean()]);
 
@@ -275,7 +297,11 @@ export const useSupportingModelForm = (
     mutationFn: (formData: SupportingModelFormData) =>
       modelsApi.create(supportingFormDataToCreatePayload(formData)),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['models'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['models'] }),
+        // Surface the new supporting model in the core RL input selector.
+        queryClient.invalidateQueries({ queryKey: ['core-rl-input-options'] }),
+      ]);
     },
   });
 
@@ -287,8 +313,11 @@ export const useSupportingModelForm = (
       return modelsApi.update(modelId, supportingFormDataToUpdatePayload(formData));
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['models'] });
-      await queryClient.invalidateQueries({ queryKey: ['models', modelId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['models'] }),
+        queryClient.invalidateQueries({ queryKey: ['models', modelId] }),
+        queryClient.invalidateQueries({ queryKey: ['core-rl-input-options'] }),
+      ]);
     },
   });
 
@@ -321,5 +350,126 @@ export const useSupportingModelForm = (
     isSaving: createMutation.isPending || updateMutation.isPending,
     save: (formData) =>
       isEditMode ? updateMutation.mutateAsync(formData) : createMutation.mutateAsync(formData),
+  };
+};
+
+/** React Query key for one supporting model's lifecycle snapshot. */
+export const supportingLifecycleQueryKey = (modelId: string): readonly unknown[] => [
+  'models',
+  modelId,
+  'lifecycle',
+];
+
+export interface UseSupportingModelLifecycleResult {
+  lifecycle: SupportingModelLifecycleResponse | undefined;
+  isLoading: boolean;
+  loadError: string | null;
+  actionError: string | null;
+  isMutating: boolean;
+  activatePretrained: (
+    overrides?: Record<string, ModelHyperparameterValue>,
+  ) => Promise<SupportingModelLifecycleResponse>;
+  loadArtifact: (modelPath: string) => Promise<SupportingModelLifecycleResponse>;
+  unload: () => Promise<SupportingModelLifecycleResponse>;
+  refetch: () => void;
+}
+
+const lifecycleErrorToMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : 'Lifecycle operation failed.';
+
+/**
+ * Manage the lifecycle query and the three readiness actions (activate
+ * pretrained, load artifact, unload) for a single supporting model.
+ *
+ * On every successful action the supporting registry state changes server-side,
+ * so this hook invalidates the model list, the single-model query, the lifecycle
+ * query, and the core RL input-option query. That last invalidation lets a core
+ * RL configuration pick up a newly-ready supporting input without a page reload.
+ */
+export const useSupportingModelLifecycle = (
+  modelId: string | undefined,
+  options: { enabled?: boolean } = {},
+): UseSupportingModelLifecycleResult => {
+  const queryClient = useQueryClient();
+  const enabled = (options.enabled ?? true) && Boolean(modelId);
+
+  const lifecycleQuery = useQuery({
+    queryKey: modelId ? supportingLifecycleQueryKey(modelId) : ['models', 'lifecycle', 'disabled'],
+    queryFn: () => modelsApi.getLifecycle(modelId ?? ''),
+    enabled,
+  });
+
+  const invalidateAfterAction = async (
+    snapshot: SupportingModelLifecycleResponse,
+  ): Promise<void> => {
+    if (!modelId) {
+      return;
+    }
+    // Seed the lifecycle cache with the authoritative backend snapshot so the
+    // panel reflects the returned state rather than an optimistic value.
+    queryClient.setQueryData(supportingLifecycleQueryKey(modelId), snapshot);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['models'] }),
+      queryClient.invalidateQueries({ queryKey: ['models', modelId] }),
+      queryClient.invalidateQueries({ queryKey: supportingLifecycleQueryKey(modelId) }),
+      // Refresh the core RL supporting-input selector so a newly-ready model is
+      // immediately selectable without a manual page reload.
+      queryClient.invalidateQueries({ queryKey: ['core-rl-input-options'] }),
+    ]);
+  };
+
+  const activateMutation = useMutation({
+    mutationFn: (overrides?: Record<string, ModelHyperparameterValue>) => {
+      if (!modelId) {
+        throw new Error('Model ID is required to activate a pretrained model.');
+      }
+      const request: ActivatePretrainedRequest =
+        overrides && Object.keys(overrides).length > 0 ? { hyperparameters: overrides } : {};
+      return modelsApi.activatePretrained(modelId, request);
+    },
+    onSuccess: invalidateAfterAction,
+  });
+
+  const loadArtifactMutation = useMutation({
+    mutationFn: (modelPath: string) => {
+      if (!modelId) {
+        throw new Error('Model ID is required to load an artifact.');
+      }
+      const request: LoadArtifactRequest = { model_path: modelPath };
+      return modelsApi.loadArtifact(modelId, request);
+    },
+    onSuccess: invalidateAfterAction,
+  });
+
+  const unloadMutation = useMutation({
+    mutationFn: () => {
+      if (!modelId) {
+        throw new Error('Model ID is required to unload a model.');
+      }
+      return modelsApi.unload(modelId);
+    },
+    onSuccess: invalidateAfterAction,
+  });
+
+  const actionError =
+    activateMutation.error || loadArtifactMutation.error || unloadMutation.error
+      ? lifecycleErrorToMessage(
+          activateMutation.error || loadArtifactMutation.error || unloadMutation.error,
+        )
+      : null;
+
+  return {
+    lifecycle: lifecycleQuery.data,
+    isLoading: lifecycleQuery.isLoading,
+    loadError: lifecycleQuery.error ? lifecycleErrorToMessage(lifecycleQuery.error) : null,
+    actionError,
+    isMutating:
+      activateMutation.isPending || loadArtifactMutation.isPending || unloadMutation.isPending,
+    activatePretrained: (overrides) => activateMutation.mutateAsync(overrides),
+    loadArtifact: (modelPath) => loadArtifactMutation.mutateAsync(modelPath),
+    unload: () => unloadMutation.mutateAsync(),
+    refetch: () => {
+      void lifecycleQuery.refetch();
+    },
   };
 };
