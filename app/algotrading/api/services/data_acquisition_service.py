@@ -177,8 +177,9 @@ def create_default_data_acquisition_service(
 def get_data_acquisition_service(request: Request) -> DataAcquisitionService:
     """FastAPI dependency resolver for the shared acquisition service."""
 
-    service = getattr(request.app.state, "data_acquisition_service", None)
-    if service is None:
+    from algotrading.api.services.app_state import get_or_create_state
+
+    def _build() -> DataAcquisitionService:
         model_service = getattr(request.app.state, "model_service", None)
         supporting_registry = getattr(model_service, "supporting_registry", None)
         supporting_registry = getattr(
@@ -191,8 +192,9 @@ def get_data_acquisition_service(request: Request) -> DataAcquisitionService:
             broker_registry=getattr(request.app.state, "broker_registry", None),
         )
         service._supporting_registry = supporting_registry
-        request.app.state.data_acquisition_service = service
-    return service
+        return service
+
+    return get_or_create_state(request, "data_acquisition_service", _build)
 
 
 def _coerce_request(

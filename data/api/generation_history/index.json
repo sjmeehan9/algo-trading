@@ -36,6 +36,15 @@
       "status": "training",
       "tags": []
     },
+    "79445ca9-0b77-47c3-938e-42d444c8f004": {
+      "created_at": "2026-06-11T04:51:35.360374+00:00",
+      "generation_number": 1,
+      "model_id": "supporting-ml-d4528f98",
+      "parent_generation_id": null,
+      "path": "supporting-ml-d4528f98/79445ca9-0b77-47c3-938e-42d444c8f004.json",
+      "status": "failed",
+      "tags": []
+    },
     "7a85dae1-df09-4a37-9d8c-2076dffcc1f8": {
       "created_at": "2026-06-11T04:36:59.754759+00:00",
       "generation_number": 1,
@@ -94,6 +103,9 @@
     "core-rl-b581a819": [
       "5fec0604-a286-4466-a6f2-1bc708359dc0",
       "64c5338e-e530-41bb-bb7c-3ad0330e8dbd"
+    ],
+    "supporting-ml-d4528f98": [
+      "79445ca9-0b77-47c3-938e-42d444c8f004"
     ],
     "supporting-ml-f6b82076": [
       "7a85dae1-df09-4a37-9d8c-2076dffcc1f8"

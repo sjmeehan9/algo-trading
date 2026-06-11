@@ -46,15 +46,17 @@ def _http_error(
 async def get_trading_session_manager(request: Request) -> TradingSessionManager:
     """FastAPI dependency resolver for the shared session manager."""
 
-    manager = getattr(request.app.state, "trading_session_manager", None)
-    if manager is None:
+    from algotrading.api.services.app_state import get_or_create_state
+
+    def _build() -> TradingSessionManager:
         model_service = get_model_service(request)
         deployment_service = get_deployment_service(request)
-        manager = create_default_session_manager(
+        return create_default_session_manager(
             model_service=model_service,
             deployment_validator=deployment_service.deployment_validator,
         )
-        request.app.state.trading_session_manager = manager
+
+    manager = get_or_create_state(request, "trading_session_manager", _build)
     await manager.initialize()
     return manager
 

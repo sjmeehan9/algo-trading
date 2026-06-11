@@ -1236,11 +1236,9 @@ def create_default_model_service(project_root: Path | None = None) -> ModelServi
 def get_model_service(request: Request) -> ModelService:
     """FastAPI dependency resolver for the shared ModelService instance."""
 
-    service = getattr(request.app.state, "model_service", None)
-    if service is None:
-        service = create_default_model_service()
-        request.app.state.model_service = service
-    return service
+    from algotrading.api.services.app_state import get_or_create_state
+
+    return get_or_create_state(request, "model_service", create_default_model_service)
 
 
 __all__ = [

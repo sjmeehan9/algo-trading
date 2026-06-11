@@ -4,6 +4,10 @@ import { z } from 'zod';
 
 import {
   DEFAULT_RL_ALGORITHM,
+  DEFAULT_SESSION_END,
+  DEFAULT_SESSION_START,
+  DEFAULT_SESSION_TIMEZONE,
+  DEFAULT_TRAINING_SYMBOLS,
   getAlgorithmDefinition,
   getDefaultHyperparameters,
   type AlgorithmDef,
@@ -69,11 +73,42 @@ export const supportingModelSchema = z
     framework: z.string().min(1, 'Framework is required'),
     algorithm: z.string().min(1, 'Algorithm is required'),
     hyperparameters: z.record(z.string(), hyperparameterValueSchema),
+    training_data: z.object({
+      symbols: z.array(z.string().trim().min(1)).min(1, 'Select at least one symbol'),
+      start_date: z.string().min(1, 'Start date is required'),
+      end_date: z.string().min(1, 'End date is required'),
+      data_frequency: z.string().min(1, 'Data frequency is required'),
+      restrict_to_session: z.boolean().default(false),
+      session_start: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM').default(DEFAULT_SESSION_START),
+      session_end: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM').default(DEFAULT_SESSION_END),
+      session_timezone: z.string().min(1, 'Timezone is required').default(DEFAULT_SESSION_TIMEZONE),
+    }),
     input_data_types: z.array(z.string()).min(1, 'Select at least one input type'),
     input_frequency: z.string().min(1, 'Input frequency is required'),
     signal_type: z.string().min(1, 'Select output signal type'),
   })
   .superRefine((value, context) => {
+    const startTime = Date.parse(`${value.training_data.start_date}T00:00:00Z`);
+    const endTime = Date.parse(`${value.training_data.end_date}T00:00:00Z`);
+    if (Number.isFinite(startTime) && Number.isFinite(endTime) && endTime < startTime) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'End date must be on or after start date',
+        path: ['training_data', 'end_date'],
+      });
+    }
+
+    if (
+      value.training_data.restrict_to_session &&
+      value.training_data.session_end <= value.training_data.session_start
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Session end must be after session start',
+        path: ['training_data', 'session_end'],
+      });
+    }
+
     const algorithm = getSupportingAlgorithmDefinition(value.model_category, value.algorithm);
     const isKnownAlgorithm = getAlgorithmsForCategory(value.model_category).some(
       (candidate) => candidate.id === value.algorithm,
@@ -161,6 +196,62 @@ const normalizeDescription = (description: string | null | undefined): string | 
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const toDateInputValue = (dateValue: Date): string => dateValue.toISOString().slice(0, 10);
+
+const oneYearBefore = (dateValue: Date): Date => {
+  const result = new Date(dateValue);
+  result.setFullYear(result.getFullYear() - 1);
+  return result;
+};
+
+const getTrainingDataString = (
+  record: Record<string, unknown>,
+  key: string,
+  fallback: string,
+): string => {
+  const value = record[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
+};
+
+const getDefaultTrainingData = (): SupportingModelFormData['training_data'] => {
+  const endDate = new Date();
+  return {
+    symbols: [DEFAULT_TRAINING_SYMBOLS[0] ?? 'SPY'],
+    start_date: toDateInputValue(oneYearBefore(endDate)),
+    end_date: toDateInputValue(endDate),
+    data_frequency: '1m',
+    restrict_to_session: false,
+    session_start: DEFAULT_SESSION_START,
+    session_end: DEFAULT_SESSION_END,
+    session_timezone: DEFAULT_SESSION_TIMEZONE,
+  };
+};
+
+const trainingDataFromConfig = (
+  trainingConfig: Record<string, unknown>,
+): SupportingModelFormData['training_data'] => {
+  const defaults = getDefaultTrainingData();
+  const symbols = getStringList(trainingConfig, 'symbols', defaults.symbols);
+  return {
+    symbols: symbols.length > 0 ? symbols : defaults.symbols,
+    start_date: getTrainingDataString(trainingConfig, 'start_date', defaults.start_date),
+    end_date: getTrainingDataString(trainingConfig, 'end_date', defaults.end_date),
+    data_frequency: getTrainingDataString(
+      trainingConfig,
+      'data_frequency',
+      defaults.data_frequency,
+    ),
+    restrict_to_session: Boolean(trainingConfig.session_start && trainingConfig.session_end),
+    session_start: getTrainingDataString(trainingConfig, 'session_start', defaults.session_start),
+    session_end: getTrainingDataString(trainingConfig, 'session_end', defaults.session_end),
+    session_timezone: getTrainingDataString(
+      trainingConfig,
+      'session_timezone',
+      defaults.session_timezone,
+    ),
+  };
+};
+
 const getAlgorithmsForCategory = (category: SupportingModelCategory): AlgorithmDef[] =>
   category === 'ml'
     ? ML_ALGORITHMS
@@ -207,6 +298,7 @@ export const getDefaultSupportingModelFormValues = (
     framework: algorithm.framework,
     algorithm: algorithm.id,
     hyperparameters: getDefaultSupportingHyperparameters(category, algorithm.id),
+    training_data: getDefaultTrainingData(),
     input_data_types: [],
     input_frequency: DEFAULT_SUPPORTING_INPUT_FREQUENCY,
     signal_type: DEFAULT_SUPPORTING_SIGNAL_TYPE,
@@ -229,6 +321,7 @@ export const modelResponseToSupportingFormData = (
     'input_data_types',
     defaults.input_data_types,
   ).filter(isSelectableSupportingInputType);
+  const trainingConfig = isRecord(model.training_data_config) ? model.training_data_config : {};
 
   return {
     name: model.name,
@@ -237,6 +330,7 @@ export const modelResponseToSupportingFormData = (
     framework: algorithm.framework,
     algorithm: algorithm.id,
     hyperparameters: cleanHyperparameters(category, algorithm.id, model.hyperparameters),
+    training_data: trainingDataFromConfig(trainingConfig),
     input_data_types: inputDataTypes,
     input_frequency: model.input_frequency ?? defaults.input_frequency,
     signal_type: model.signal_type ?? defaults.signal_type,
@@ -260,7 +354,21 @@ export const supportingFormDataToCreatePayload = (
       algorithm.id,
       formData.hyperparameters,
     ),
-    training_data_config: {},
+    training_data_config: {
+      symbols: formData.training_data.symbols.map((symbol) => symbol.trim().toUpperCase()),
+      start_date: formData.training_data.start_date,
+      end_date: formData.training_data.end_date,
+      data_frequency: formData.training_data.data_frequency,
+      // Only send the session window when explicitly enabled; omitting these
+      // keys leaves the backend on full-day (useRTH) acquisition.
+      ...(formData.training_data.restrict_to_session
+        ? {
+            session_start: formData.training_data.session_start,
+            session_end: formData.training_data.session_end,
+            session_timezone: formData.training_data.session_timezone,
+          }
+        : {}),
+    },
     supporting_model_ids: [],
     strategy_ids: [],
     environment_config: {},

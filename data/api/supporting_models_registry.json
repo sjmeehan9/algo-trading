@@ -72,7 +72,87 @@
       "loaded_at": null,
       "registered_at": "2026-06-11T04:36:42.082255+00:00",
       "state": "registered"
+    },
+    {
+      "config": {
+        "config": {
+          "algorithm": "transformer_sentiment",
+          "created_at": "2026-06-11T04:48:31.541346+00:00",
+          "description": null,
+          "hyperparameters": {
+            "max_length": 512,
+            "model_name": "finbert"
+          },
+          "input_data_types": [
+            "news_text"
+          ],
+          "input_frequency": "1m",
+          "name": "news test 2",
+          "trainer_type": "huggingface",
+          "training_data_config": {},
+          "updated_at": "2026-06-11T04:48:31.541346+00:00"
+        },
+        "description": null,
+        "input_data_types": [
+          "NEWS_TEXT"
+        ],
+        "input_frequency": "MINUTE_1",
+        "model_id": "supporting-ml-d4528f98",
+        "model_path": null,
+        "model_type": "ml",
+        "signal_type": "sentiment",
+        "trainer_class": "algotrading.src.models.supporting.sentiment.news_sentiment.NewsSentimentTrainer"
+      },
+      "error_message": null,
+      "inference_count": 0,
+      "last_inference_time": null,
+      "loaded_at": null,
+      "registered_at": "2026-06-11T04:48:31.541446+00:00",
+      "state": "registered"
+    },
+    {
+      "config": {
+        "config": {
+          "algorithm": "finbert",
+          "created_at": "2026-06-11T06:12:27.158116+00:00",
+          "description": null,
+          "hyperparameters": {
+            "max_length": 512
+          },
+          "input_data_types": [
+            "news_text"
+          ],
+          "input_frequency": "1m",
+          "name": "news test3",
+          "trainer_type": "huggingface",
+          "training_data_config": {
+            "data_frequency": "1m",
+            "end_date": "2026-05-15",
+            "start_date": "2026-05-11",
+            "symbols": [
+              "NVDA"
+            ]
+          },
+          "updated_at": "2026-06-11T06:12:27.158116+00:00"
+        },
+        "description": null,
+        "input_data_types": [
+          "NEWS_TEXT"
+        ],
+        "input_frequency": "MINUTE_1",
+        "model_id": "supporting-ml-abbf70f6",
+        "model_path": null,
+        "model_type": "ml",
+        "signal_type": "sentiment",
+        "trainer_class": "algotrading.src.models.supporting.sentiment.news_sentiment.NewsSentimentTrainer"
+      },
+      "error_message": null,
+      "inference_count": 0,
+      "last_inference_time": null,
+      "loaded_at": null,
+      "registered_at": "2026-06-11T06:12:27.158216+00:00",
+      "state": "registered"
     }
   ],
-  "saved_at": "2026-06-11T04:36:42.082847+00:00"
+  "saved_at": "2026-06-11T06:12:27.158263+00:00"
 }

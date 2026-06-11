@@ -856,20 +856,21 @@ def _build_model_driven_executor(
 def get_backtest_service(request: Request) -> BacktestService:
     """FastAPI dependency resolver for the shared BacktestService instance."""
 
-    service = getattr(request.app.state, "backtest_service", None)
-    if service is None:
+    from algotrading.api.services.app_state import get_or_create_state
+
+    def _build() -> BacktestService:
         from algotrading.api.services.model_service import get_model_service
 
         model_service = get_model_service(request)
         data_service = getattr(request.app.state, "data_acquisition_service", None)
         api_config = getattr(request.app.state, "api_config", None)
-        service = create_default_backtest_service(
+        return create_default_backtest_service(
             model_service=model_service,
             data_service=data_service,
             api_config=api_config,
         )
-        request.app.state.backtest_service = service
-    return service
+
+    return get_or_create_state(request, "backtest_service", _build)
 
 
 __all__ = [

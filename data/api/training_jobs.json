@@ -199,7 +199,43 @@
       "status": "failed",
       "total_timesteps": 10000,
       "training_config": {}
+    },
+    {
+      "completed_at": "2026-06-11T04:48:42.791456Z",
+      "continue_from_generation_id": null,
+      "created_at": "2026-06-11T04:48:42.786054Z",
+      "current_metrics": {},
+      "current_timestep": 0,
+      "data_config": {},
+      "description": "1",
+      "error_message": "Failed to start generation: [Errno 28] No space left on device: '/Users/seanmeehan/Projects/trading-app-dev/algo-trading/data/api/generation_history/supporting-ml-d4528f98'",
+      "generation_id": null,
+      "job_id": "job-12d0564124f5",
+      "model_id": "supporting-ml-d4528f98",
+      "progress_percent": 0.0,
+      "started_at": null,
+      "status": "failed",
+      "total_timesteps": 10000,
+      "training_config": {}
+    },
+    {
+      "completed_at": "2026-06-11T04:51:35.367171Z",
+      "continue_from_generation_id": null,
+      "created_at": "2026-06-11T04:51:35.356713Z",
+      "current_metrics": {},
+      "current_timestep": 0,
+      "data_config": {},
+      "description": "1",
+      "error_message": "data request must include at least one symbol",
+      "generation_id": "79445ca9-0b77-47c3-938e-42d444c8f004",
+      "job_id": "job-d5fc259ceb80",
+      "model_id": "supporting-ml-d4528f98",
+      "progress_percent": 0.0,
+      "started_at": "2026-06-11T04:51:35.361681Z",
+      "status": "failed",
+      "total_timesteps": 10000,
+      "training_config": {}
     }
   ],
-  "saved_at": "2026-06-11T04:36:59.802855+00:00"
+  "saved_at": "2026-06-11T04:51:35.367200+00:00"
 }

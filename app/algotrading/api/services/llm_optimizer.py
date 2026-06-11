@@ -795,18 +795,19 @@ def create_default_optimizer_service(
 def get_optimizer_service(request: Request) -> LLMOptimizer:
     """FastAPI dependency resolver for the shared optimizer service."""
 
-    service = getattr(request.app.state, "optimizer_service", None)
-    if service is None:
+    from algotrading.api.services.app_state import get_or_create_state
+
+    def _build() -> LLMOptimizer:
         from algotrading.api.services.model_service import get_model_service
 
         model_service = get_model_service(request)
         config = request.app.state.api_config
-        service = create_default_optimizer_service(
+        return create_default_optimizer_service(
             model_service=model_service,
             config=config,
         )
-        request.app.state.optimizer_service = service
-    return service
+
+    return get_or_create_state(request, "optimizer_service", _build)
 
 
 __all__ = [

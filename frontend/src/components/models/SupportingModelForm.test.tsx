@@ -48,6 +48,36 @@ describe('SupportingModelForm', () => {
     expect(screen.getByLabelText(/LSTM Units/)).toBeInTheDocument();
   });
 
+  it('does not flag a framework mismatch after switching frameworks', async () => {
+    const user = userEvent.setup();
+    renderSupportingForm();
+
+    for (const framework of ['huggingface', 'tensorflow', 'sklearn']) {
+      await user.selectOptions(screen.getByLabelText(/Framework/), framework);
+
+      expect(screen.getByLabelText(/Framework/)).toHaveValue(framework);
+      expect(
+        screen.queryByText('Framework must match the selected algorithm'),
+      ).not.toBeInTheDocument();
+    }
+  });
+
+  it('keeps framework and algorithm consistent when picking within a framework', async () => {
+    const user = userEvent.setup();
+    renderSupportingForm();
+
+    await user.selectOptions(screen.getByLabelText(/Framework/), 'huggingface');
+    expect(screen.getByLabelText(/Algorithm/)).toHaveValue('transformer_sentiment');
+
+    await user.selectOptions(screen.getByLabelText(/Algorithm/), 'finbert');
+
+    expect(screen.getByLabelText(/Framework/)).toHaveValue('huggingface');
+    expect(screen.getByLabelText(/Algorithm/)).toHaveValue('finbert');
+    expect(
+      screen.queryByText('Framework must match the selected algorithm'),
+    ).not.toBeInTheDocument();
+  });
+
   it('submits selected data and signal types without exposing model signal inputs', async () => {
     const user = userEvent.setup();
     const { handleSubmit } = renderSupportingForm();

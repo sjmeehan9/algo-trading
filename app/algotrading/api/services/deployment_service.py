@@ -747,19 +747,20 @@ def create_default_deployment_service(
 def get_deployment_service(request: Request) -> DeploymentService:
     """FastAPI dependency resolver for the shared DeploymentService instance."""
 
-    service = getattr(request.app.state, "deployment_service", None)
-    if service is None:
+    from algotrading.api.services.app_state import get_or_create_state
+
+    def _build() -> DeploymentService:
         from algotrading.api.services.backtest_service import get_backtest_service
         from algotrading.api.services.model_service import get_model_service
 
         model_service = get_model_service(request)
         backtest_service = get_backtest_service(request)
-        service = create_default_deployment_service(
+        return create_default_deployment_service(
             model_service=model_service,
             backtest_service=backtest_service,
         )
-        request.app.state.deployment_service = service
-    return service
+
+    return get_or_create_state(request, "deployment_service", _build)
 
 
 __all__ = [

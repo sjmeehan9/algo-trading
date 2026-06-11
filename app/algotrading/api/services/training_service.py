@@ -901,8 +901,9 @@ def create_default_training_service(
 def get_training_service(request: Request) -> TrainingService:
     """FastAPI dependency resolver for the shared TrainingService instance."""
 
-    service = getattr(request.app.state, "training_service", None)
-    if service is None:
+    from algotrading.api.services.app_state import get_or_create_state
+
+    def _build() -> TrainingService:
         from algotrading.api.services.model_service import get_model_service
 
         model_service = get_model_service(request)
@@ -912,7 +913,6 @@ def get_training_service(request: Request) -> TrainingService:
             model_service=model_service,
             api_config=request.app.state.api_config,
         )
-        request.app.state.training_service = service
 
         # Start the worker if there is a running event loop available.
         try:
@@ -921,7 +921,9 @@ def get_training_service(request: Request) -> TrainingService:
             loop = None
         if loop is not None and loop.is_running():
             asyncio.ensure_future(service.start(), loop=loop)
-    return service
+        return service
+
+    return get_or_create_state(request, "training_service", _build)
 
 
 def _artifact_exists(model_path: str) -> bool:

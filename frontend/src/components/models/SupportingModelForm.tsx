@@ -17,6 +17,7 @@ import {
   type SupportingModelCategory,
   type SupportingModelFormData,
 } from '../../hooks/useSupportingModelForm';
+import DataSelector from './DataSelector';
 import DataTypeSelector from './DataTypeSelector';
 import HyperparameterEditor from './HyperparameterEditor';
 import SignalTypeSelector from './SignalTypeSelector';
@@ -55,6 +56,7 @@ export default function SupportingModelForm({
     handleSubmit,
     reset,
     setValue,
+    trigger,
     watch,
     formState: { errors },
   } = useForm<SupportingModelFormData>({
@@ -89,12 +91,16 @@ export default function SupportingModelForm({
     algorithmId: string,
     framework: string,
   ): void => {
-    setValue('framework', framework, { shouldDirty: true, shouldValidate: true });
-    setValue('algorithm', algorithmId, { shouldDirty: true, shouldValidate: true });
+    // Set all fields before validating: validating each setValue individually
+    // runs the cross-field framework/algorithm check against a half-updated
+    // form and leaves a stale "Framework must match" error on the framework
+    // field that nothing re-validates.
+    setValue('framework', framework, { shouldDirty: true });
+    setValue('algorithm', algorithmId, { shouldDirty: true });
     setValue('hyperparameters', getDefaultSupportingHyperparameters(category, algorithmId), {
       shouldDirty: true,
-      shouldValidate: true,
     });
+    void trigger(['framework', 'algorithm']);
   };
 
   const handleCategoryChange = (category: SupportingModelCategory): void => {
@@ -338,6 +344,30 @@ export default function SupportingModelForm({
           />
           {errors.input_frequency?.message && (
             <p className="mt-1 text-sm text-red-600">{errors.input_frequency.message}</p>
+          )}
+        </div>
+      </section>
+
+      <section className="surface-panel p-5">
+        <h3 className="text-lg font-semibold text-ink">Training Data</h3>
+        <p className="mt-1 text-sm text-stone-500">
+          Symbols and date range used to source historical data (market bars or
+          symbol-scoped news) when this model is trained.
+        </p>
+        <div className="mt-4">
+          <Controller
+            name="training_data"
+            control={control}
+            render={({ field }) => <DataSelector value={field.value} onChange={field.onChange} />}
+          />
+          {errors.training_data?.symbols?.message && (
+            <p className="mt-2 text-sm text-red-600">{errors.training_data.symbols.message}</p>
+          )}
+          {errors.training_data?.end_date?.message && (
+            <p className="mt-2 text-sm text-red-600">{errors.training_data.end_date.message}</p>
+          )}
+          {errors.training_data?.session_end?.message && (
+            <p className="mt-2 text-sm text-red-600">{errors.training_data.session_end.message}</p>
           )}
         </div>
       </section>
