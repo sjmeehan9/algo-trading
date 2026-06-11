@@ -70,6 +70,7 @@ class _FakeModel:
         self.kwargs = kwargs
         self.saved_path: str | None = None
         self.replay_buffer = _FakeReplayBuffer(marker="initial")
+        self.last_reset_num_timesteps: bool | None = None
 
     @classmethod
     def load(cls, path: str, env: Env | None = None):
@@ -84,8 +85,10 @@ class _FakeModel:
         total_timesteps: int,
         callback=None,
         progress_bar: bool = False,
+        reset_num_timesteps: bool = True,
     ) -> None:
         del progress_bar
+        self.last_reset_num_timesteps = reset_num_timesteps
         if callback is not None:
             callback.locals = {
                 "rewards": np.array([0.5], dtype=np.float32),
@@ -168,6 +171,22 @@ def test_train_provides_progress_callback_payloads(
     assert result.final_reward == pytest.approx(1.5)
     assert len(events) == 2
     assert events[-1]["timesteps"] == 12
+
+
+def test_train_forwards_reset_num_timesteps_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """train forwards reset_num_timesteps to learn for warm-start continuation."""
+
+    trainer = StableBaselines3Trainer(algorithm=SB3Algorithm.PPO)
+    monkeypatch.setitem(trainer._MODEL_CLASS_MAP, SB3Algorithm.PPO, _FakeModel)
+    trainer.create_model(_DummyEnv(), TrainingConfig(total_timesteps=12))
+
+    trainer.train(TrainingConfig(total_timesteps=12))
+    assert trainer._model.last_reset_num_timesteps is True
+
+    trainer.train(TrainingConfig(total_timesteps=12), reset_num_timesteps=False)
+    assert trainer._model.last_reset_num_timesteps is False
 
 
 def test_predict_raises_when_model_not_ready() -> None:

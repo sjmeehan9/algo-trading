@@ -4,6 +4,7 @@ from algotrading.src.data_pipeline.acquisition.market_data import (
     AcquisitionResult,
     AcquisitionStatus,
     HistoricalMarketDataAcquirer,
+    MarketDataAcquisitionCancelled,
     MarketDataAcquisitionError,
     SymbolAcquisitionReport,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "AcquisitionStatus",
     "HistoricalMarketDataAcquirer",
     "HistoricalNewsAcquirer",
+    "MarketDataAcquisitionCancelled",
     "MarketDataAcquisitionError",
     "NewsDataAcquisitionError",
     "SymbolAcquisitionReport",

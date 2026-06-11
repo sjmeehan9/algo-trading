@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from math import ceil
 from queue import Empty, Queue
 from typing import Iterator
 
@@ -26,6 +27,14 @@ from algotrading.src.data_pipeline.types import (
     DataType,
     SourceMetadata,
 )
+
+
+# Interactive Brokers caps the seconds (``S``) duration unit at one day; larger
+# spans must be expressed in days or years. See historical_limitations.html.
+_SECONDS_PER_DAY = 86_400
+_MAX_SECONDS_DURATION = _SECONDS_PER_DAY
+_DAYS_PER_YEAR = 365
+_MAX_DAYS_DURATION = _DAYS_PER_YEAR
 
 
 @dataclass(frozen=True, slots=True)
@@ -408,13 +417,30 @@ class BrokerDataSource(DataSource):
         )
 
     def _duration_string(self, start: datetime, end: datetime) -> str:
+        """Build an IB-valid duration string for the requested span.
+
+        Interactive Brokers rejects ``reqHistoricalData`` durations expressed in
+        seconds (the ``S`` unit) above 86400 (one day) with error 321. Spans
+        wider than a day must therefore be expressed in days (``D``) or, beyond
+        one year, in years (``Y``). Sub-day spans keep second precision so the
+        post-filter window in :meth:`fetch_batch` stays exact.
+        """
+
         start_utc = (
             start.replace(tzinfo=UTC) if start.tzinfo is None else start.astimezone(UTC)
         )
         end_utc = end.replace(tzinfo=UTC) if end.tzinfo is None else end.astimezone(UTC)
-        delta_seconds = int((end_utc - start_utc).total_seconds())
-        bounded_seconds = max(1, delta_seconds)
-        return f"{bounded_seconds} S"
+        delta_seconds = max(1, int(ceil((end_utc - start_utc).total_seconds())))
+
+        if delta_seconds <= _MAX_SECONDS_DURATION:
+            return f"{delta_seconds} S"
+
+        days = ceil(delta_seconds / _SECONDS_PER_DAY)
+        if days <= _MAX_DAYS_DURATION:
+            return f"{days} D"
+
+        years = ceil(days / _DAYS_PER_YEAR)
+        return f"{years} Y"
 
 
 __all__ = [

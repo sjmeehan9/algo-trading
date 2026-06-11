@@ -1,7 +1,11 @@
 import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { DATA_FREQUENCIES, DEFAULT_TRAINING_SYMBOLS } from '../../constants/algorithms';
+import {
+  DATA_FREQUENCIES,
+  DEFAULT_TRAINING_SYMBOLS,
+  SESSION_TIMEZONES,
+} from '../../constants/algorithms';
 import type { CoreRLModelFormData } from '../../hooks/useModelForm';
 
 type TrainingDataFormValue = CoreRLModelFormData['training_data'];
@@ -16,6 +20,8 @@ const normalizeSymbol = (symbol: string): string => symbol.trim().toUpperCase();
 /** Symbol, date range, and frequency selector for model training data. */
 export default function DataSelector({ value, onChange }: DataSelectorProps): JSX.Element {
   const [customSymbol, setCustomSymbol] = useState('');
+
+  const isDailyFrequency = value.data_frequency === '1d';
 
   const update = (changes: Partial<TrainingDataFormValue>): void => {
     onChange({ ...value, ...changes });
@@ -153,6 +159,83 @@ export default function DataSelector({ value, onChange }: DataSelectorProps): JS
           </select>
         </div>
       </div>
+
+      <fieldset className="rounded-md border border-stone-200 p-4">
+        <legend className="px-1 text-sm font-medium text-ink">Trading session</legend>
+        <label className="flex items-center gap-3 text-sm text-stone-700">
+          <input
+            type="checkbox"
+            checked={value.restrict_to_session}
+            onChange={(event) => update({ restrict_to_session: event.target.checked })}
+            disabled={isDailyFrequency}
+            className="h-4 w-4 rounded border-stone-300 text-action"
+          />
+          Restrict requests to a daily trading-session window
+        </label>
+        <p className="mt-1 text-xs text-stone-500">
+          {isDailyFrequency
+            ? 'Daily bars cover the whole session, so no intraday window is sent.'
+            : 'When enabled, intraday data is requested per trading day within the window'
+              + ' below (exchange-local time). Leave off to request full regular trading hours.'}
+        </p>
+
+        {value.restrict_to_session && !isDailyFrequency && (
+          <div className="mt-3 grid gap-4 md:grid-cols-3">
+            <div>
+              <label
+                htmlFor="session-start-time"
+                className="mb-1 block text-sm font-medium text-ink"
+              >
+                Session start
+              </label>
+              <input
+                id="session-start-time"
+                type="time"
+                value={value.session_start}
+                onChange={(event) => update({ session_start: event.target.value })}
+                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm text-ink shadow-sm focus:border-action"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="session-end-time"
+                className="mb-1 block text-sm font-medium text-ink"
+              >
+                Session end
+              </label>
+              <input
+                id="session-end-time"
+                type="time"
+                value={value.session_end}
+                onChange={(event) => update({ session_end: event.target.value })}
+                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm text-ink shadow-sm focus:border-action"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="session-timezone"
+                className="mb-1 block text-sm font-medium text-ink"
+              >
+                Timezone
+              </label>
+              <select
+                id="session-timezone"
+                value={value.session_timezone}
+                onChange={(event) => update({ session_timezone: event.target.value })}
+                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm text-ink shadow-sm focus:border-action"
+              >
+                {SESSION_TIMEZONES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+      </fieldset>
     </div>
   );
 }

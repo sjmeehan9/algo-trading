@@ -166,6 +166,12 @@ class TrainingService:
         if total_timesteps < 1:
             raise TrainingServiceError("total_timesteps must be a positive integer")
 
+        if request.continue_from_generation_id is not None:
+            self._validate_continue_source(
+                model=model,
+                generation_id=request.continue_from_generation_id,
+            )
+
         await self.ensure_started()
 
         job_id = f"job-{uuid4().hex[:12]}"
@@ -178,6 +184,7 @@ class TrainingService:
             description=request.description,
             training_config=dict(request.training_config),
             data_config=dict(request.data_config),
+            continue_from_generation_id=request.continue_from_generation_id,
         )
 
         with self._lock:
@@ -190,6 +197,40 @@ class TrainingService:
         self._signal_queue()
         await self._broadcast_job(job)
         return job
+
+    def _validate_continue_source(self, *, model: Any, generation_id: str) -> None:
+        """Validate a warm-start source generation before queueing the job.
+
+        Raises:
+            TrainingServiceError: If continue-training is requested for a
+                non-RL model, the generation does not exist or belongs to a
+                different model, or its saved artifact is unavailable.
+        """
+
+        if model.model_type not in (ModelType.CORE_RL, ModelType.SUPPORTING_RL):
+            raise TrainingServiceError(
+                "Continue training is only supported for RL models"
+            )
+
+        generation = self._generation_tracker.get_generation(generation_id)
+        if generation is None:
+            raise TrainingServiceError(
+                f"Generation '{generation_id}' was not found"
+            )
+        if generation.model_id != model.model_id:
+            raise TrainingServiceError(
+                f"Generation '{generation_id}' belongs to a different model"
+            )
+        if not generation.model_path:
+            raise TrainingServiceError(
+                f"Generation '{generation_id}' has no saved model artifact to "
+                "continue from"
+            )
+        if not _artifact_exists(generation.model_path):
+            raise TrainingServiceError(
+                f"Saved artifact for generation '{generation_id}' is missing: "
+                f"{generation.model_path}"
+            )
 
     async def get_job(self, job_id: str) -> TrainingJob:
         """Return one job by ID."""
@@ -372,6 +413,7 @@ class TrainingService:
             generation = self._generation_tracker.start_generation(
                 model_id=model.model_id,
                 hyperparameters=dict(model.hyperparameters),
+                parent_generation_id=request.continue_from_generation_id,
             )
         except Exception as exc:  # pragma: no cover - defensive guard
             await self.mark_failed(job_id, f"Failed to start generation: {exc}")
@@ -880,6 +922,17 @@ def get_training_service(request: Request) -> TrainingService:
         if loop is not None and loop.is_running():
             asyncio.ensure_future(service.start(), loop=loop)
     return service
+
+
+def _artifact_exists(model_path: str) -> bool:
+    """Return whether a saved RL artifact exists at ``model_path``.
+
+    SB3 persists models with a ``.zip`` extension; some recorded paths omit it,
+    so accept either form.
+    """
+
+    path = Path(model_path)
+    return path.exists() or path.with_suffix(".zip").exists()
 
 
 __all__ = [

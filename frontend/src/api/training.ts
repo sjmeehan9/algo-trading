@@ -59,6 +59,7 @@ export interface TrainingJob {
   description?: string | null;
   training_config: Record<string, unknown>;
   data_config: Record<string, unknown>;
+  continue_from_generation_id?: string | null;
 }
 
 export interface TrainingJobCreate {
@@ -67,6 +68,11 @@ export interface TrainingJobCreate {
   data_config?: Record<string, unknown>;
   total_timesteps?: number;
   description?: string;
+  /**
+   * When set, warm-start (continue) training from this completed generation's
+   * saved artifact instead of initialising a fresh model. RL models only.
+   */
+  continue_from_generation_id?: string;
 }
 
 export interface ListTrainingJobsParams {

@@ -43,6 +43,20 @@ class TrainingJobCreate(BaseModel):
     data_config: dict[str, Any] = Field(default_factory=dict)
     total_timesteps: int | None = Field(default=None, ge=1)
     description: str | None = None
+    # When set, warm-start training from this completed generation's saved
+    # artifact (RL only) and train for ``total_timesteps`` additional steps,
+    # instead of initialising a fresh model. ``None`` keeps from-scratch.
+    continue_from_generation_id: str | None = None
+
+    @field_validator("continue_from_generation_id", mode="before")
+    @classmethod
+    def _normalize_continue_generation(cls, value: object) -> str | None:
+        """Treat blank continue-from values as unset (from-scratch)."""
+
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
 
     @field_validator("data_config")
     @classmethod
@@ -96,6 +110,7 @@ class TrainingJob(BaseModel):
     description: str | None = None
     training_config: dict[str, Any] = Field(default_factory=dict)
     data_config: dict[str, Any] = Field(default_factory=dict)
+    continue_from_generation_id: str | None = None
 
 
 class TrainingProgress(BaseModel):

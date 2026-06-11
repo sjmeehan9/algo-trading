@@ -131,3 +131,101 @@ describe('core RL form payload conversion', () => {
     expect(formData.environment_config.allow_short_selling).toBe(true);
   });
 });
+
+describe('trading-session window payload', () => {
+  it('omits session keys when the session window is disabled', () => {
+    const formData = {
+      ...getDefaultCoreRLFormValues(),
+      name: 'Full session',
+    };
+
+    const payload = coreRLFormDataToCreatePayload(formData);
+
+    expect(formData.training_data.restrict_to_session).toBe(false);
+    expect(payload.training_data_config).not.toHaveProperty('session_start');
+    expect(payload.training_data_config).not.toHaveProperty('session_end');
+    expect(payload.training_data_config).not.toHaveProperty('session_timezone');
+  });
+
+  it('includes session keys when the session window is enabled', () => {
+    const defaults = getDefaultCoreRLFormValues();
+    const formData = {
+      ...defaults,
+      name: 'RTH session',
+      training_data: {
+        ...defaults.training_data,
+        restrict_to_session: true,
+        session_start: '09:30',
+        session_end: '15:30',
+        session_timezone: 'America/New_York',
+      },
+    };
+
+    const payload = coreRLFormDataToCreatePayload(formData);
+
+    expect(payload.training_data_config).toMatchObject({
+      session_start: '09:30',
+      session_end: '15:30',
+      session_timezone: 'America/New_York',
+    });
+  });
+
+  it('rejects a session window whose end is not after its start', () => {
+    const defaults = getDefaultCoreRLFormValues();
+    const formData = {
+      ...defaults,
+      name: 'Reversed session',
+      training_data: {
+        ...defaults.training_data,
+        restrict_to_session: true,
+        session_start: '15:30',
+        session_end: '09:30',
+      },
+    };
+
+    const result = coreRLModelSchema.safeParse(formData);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.message)).toEqual(
+        expect.arrayContaining(['Session end must be after session start']),
+      );
+    }
+  });
+
+  it('hydrates the session toggle from a stored session window', () => {
+    const formData = modelResponseToCoreRLFormData({
+      model_id: 'core-rl-2',
+      name: 'Stored session',
+      description: null,
+      model_type: 'core_rl',
+      signal_type: null,
+      trainer_type: 'stable_baselines3',
+      algorithm: 'ppo',
+      hyperparameters: { total_timesteps: 100_000 },
+      training_data_config: {
+        symbols: ['AAPL'],
+        start_date: '2025-01-01',
+        end_date: '2025-06-30',
+        data_frequency: '1m',
+        session_start: '10:00',
+        session_end: '16:00',
+        session_timezone: 'Europe/London',
+      },
+      supporting_model_ids: [],
+      strategy_ids: [],
+      environment_config: {},
+      reward_function: 'profit_seeker',
+      input_data_types: [],
+      input_frequency: null,
+      created_at: '2026-04-01T00:00:00Z',
+      updated_at: '2026-04-02T00:00:00Z',
+      state: 'configured',
+    } as ModelConfigResponse);
+
+    expect(formData.training_data.restrict_to_session).toBe(true);
+    expect(formData.training_data.session_start).toBe('10:00');
+    expect(formData.training_data.session_end).toBe('16:00');
+    expect(formData.training_data.session_timezone).toBe('Europe/London');
+  });
+});

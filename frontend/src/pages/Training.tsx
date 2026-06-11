@@ -44,6 +44,19 @@ const getSelectedGenerations = (
     )
     .filter((generation): generation is GenerationSummary => Boolean(generation));
 
+/** Build the visible label for a continue-from generation option. */
+const getGenerationOptionLabel = (generation: GenerationSummary): string => {
+  const reward =
+    typeof generation.final_reward === 'number'
+      ? `, reward ${generation.final_reward.toFixed(2)}`
+      : '';
+  return `Generation ${generation.generation_number}${reward}`;
+};
+
+/** Model types whose training supports warm-start (continue) from a generation. */
+const continueSupportedForModel = (model: ModelConfigResponse | undefined): boolean =>
+  model?.model_type === 'core_rl' || model?.model_type === 'supporting_rl';
+
 /** Route page for training job monitoring and generation review. */
 export default function Training(): JSX.Element {
   const queryClient = useQueryClient();
@@ -51,6 +64,8 @@ export default function Training(): JSX.Element {
   const [timestepsInput, setTimestepsInput] = useState(String(DEFAULT_TIMESTEPS));
   const [description, setDescription] = useState('');
   const [selectedGenerationIds, setSelectedGenerationIds] = useState<string[]>([]);
+  const [continueTraining, setContinueTraining] = useState(false);
+  const [continueGenerationId, setContinueGenerationId] = useState('');
 
   const modelsQuery = useQuery({
     queryKey: ['models', 'trainable', 'training-dashboard'],
@@ -85,6 +100,10 @@ export default function Training(): JSX.Element {
     [modelsQuery.data],
   );
   const modelNames = useMemo(() => createModelNameMap(models), [models]);
+  const selectedModel = useMemo(
+    () => models.find((model) => model.model_id === selectedModelId),
+    [models, selectedModelId],
+  );
   const activeJobs = runningJobsQuery.data ?? [];
   const queuedJobs = queuedJobsQuery.data ?? [];
   const generations = useMemo(() => generationsQuery.data ?? [], [generationsQuery.data]);
@@ -126,14 +145,22 @@ export default function Training(): JSX.Element {
       if (!Number.isInteger(totalTimesteps) || totalTimesteps < 1000) {
         throw new Error('Total timesteps must be at least 1,000.');
       }
+      if (continueTraining && !continueGenerationId) {
+        throw new Error('Select a generation to continue training from.');
+      }
       return trainingApi.createJob({
         model_id: selectedModelId,
         total_timesteps: totalTimesteps,
         description: description.trim() || undefined,
+        ...(continueTraining && continueGenerationId
+          ? { continue_from_generation_id: continueGenerationId }
+          : {}),
       });
     },
     onSuccess: async (job) => {
       setDescription('');
+      setContinueTraining(false);
+      setContinueGenerationId('');
       await invalidateTrainingData(job.model_id);
     },
   });
@@ -155,6 +182,8 @@ export default function Training(): JSX.Element {
   const handleModelChange = (modelId: string): void => {
     setSelectedModelId(modelId);
     setSelectedGenerationIds([]);
+    setContinueTraining(false);
+    setContinueGenerationId('');
   };
 
   const handleRefresh = (): void => {
@@ -286,6 +315,59 @@ export default function Training(): JSX.Element {
                 <Play size={16} aria-hidden="true" />
                 {startMutation.isPending ? 'Queueing' : 'Start training'}
               </button>
+            </div>
+
+            <div className="lg:col-span-full">
+              {continueSupportedForModel(selectedModel) ? (
+                <div className="rounded-md border border-stone-200 p-3">
+                  <label className="flex items-center gap-3 text-sm text-stone-700">
+                    <input
+                      type="checkbox"
+                      checked={continueTraining}
+                      disabled={generations.length === 0}
+                      onChange={(event) => {
+                        setContinueTraining(event.target.checked);
+                        if (event.target.checked && !continueGenerationId && generations[0]) {
+                          setContinueGenerationId(generations[0].generation_id);
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-stone-300 text-action"
+                    />
+                    Continue training from a previous generation
+                    {generations.length === 0 && (
+                      <span className="text-xs text-stone-400">
+                        (no completed generations yet)
+                      </span>
+                    )}
+                  </label>
+                  {continueTraining && generations.length > 0 && (
+                    <div className="mt-3 max-w-md">
+                      <label
+                        htmlFor="continue-generation"
+                        className="mb-1 block text-sm font-medium text-ink"
+                      >
+                        Continue from generation
+                      </label>
+                      <select
+                        id="continue-generation"
+                        value={continueGenerationId}
+                        onChange={(event) => setContinueGenerationId(event.target.value)}
+                        className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm"
+                      >
+                        {generations.map((generation) => (
+                          <option key={generation.generation_id} value={generation.generation_id}>
+                            {getGenerationOptionLabel(generation)}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-xs text-stone-500">
+                        Trains {Number(timestepsInput).toLocaleString()} additional timesteps on the
+                        selected generation&apos;s weights instead of starting fresh.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
           </form>
         )}

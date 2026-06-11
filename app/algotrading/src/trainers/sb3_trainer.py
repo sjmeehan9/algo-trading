@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import pickle
 import time
 from enum import Enum
@@ -174,8 +173,18 @@ class StableBaselines3Trainer(RLTrainer):
         self,
         config: TrainingConfig,
         callback: Callable[[dict[str, object]], None] | None = None,
+        *,
+        reset_num_timesteps: bool = True,
     ) -> TrainingResult:
-        """Train the configured SB3 model and return summary metadata."""
+        """Train the configured SB3 model and return summary metadata.
+
+        Args:
+            config: Training configuration including the timestep budget.
+            callback: Optional progress callback.
+            reset_num_timesteps: When ``False``, continue the model's existing
+                timestep counter instead of resetting it. Used to warm-start
+                (continue) training from a previously trained artifact.
+        """
 
         if self._model is None:
             raise TrainingError(
@@ -195,6 +204,7 @@ class StableBaselines3Trainer(RLTrainer):
                 total_timesteps=config.total_timesteps,
                 callback=progress_callback,
                 progress_bar=False,
+                reset_num_timesteps=reset_num_timesteps,
             )
         except Exception as exc:  # pragma: no cover - defensive error wrapping
             raise TrainingError(

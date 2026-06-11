@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+import time as time_module
+from collections import deque
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from enum import Enum
 from pathlib import Path
+from threading import Event
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from algotrading.api.schemas.data_sources import (
@@ -77,6 +82,9 @@ class AcquisitionResult(BaseModel):
         return [report.symbol for report in self.reports]
 
 
+logger = logging.getLogger(__name__)
+
+
 class MarketDataAcquisitionError(DataSourceError):
     """Raised when historical market data cannot be acquired."""
 
@@ -89,6 +97,10 @@ class MarketDataAcquisitionError(DataSourceError):
 
         super().__init__(message)
         self.reports = list(reports or [])
+
+
+class MarketDataAcquisitionCancelled(MarketDataAcquisitionError):
+    """Raised when historical market-data acquisition is cancelled mid-flight."""
 
 
 class HistoricalMarketDataAcquirer:
@@ -119,8 +131,20 @@ class HistoricalMarketDataAcquirer:
 
         return self._store
 
-    def acquire(self, request: TrainingDataRequest) -> AcquisitionResult:
-        """Acquire or load historical market data for a canonical request."""
+    def acquire(
+        self,
+        request: TrainingDataRequest,
+        *,
+        cancel_event: Event | None = None,
+    ) -> AcquisitionResult:
+        """Acquire or load historical market data for a canonical request.
+
+        Args:
+            request: Canonical market-data request.
+            cancel_event: Optional event signalling that broker acquisition
+                should stop; checked between requests so a long broker source
+                can be interrupted cleanly.
+        """
 
         warnings: list[str] = []
         if request.cache_policy != CachePolicy.REFRESH:
@@ -150,7 +174,7 @@ class HistoricalMarketDataAcquirer:
         if provider == MarketDataProvider.FILE:
             reports = self._acquire_from_files(request)
         else:
-            reports = self._acquire_from_broker(request)
+            reports = self._acquire_from_broker(request, cancel_event=cancel_event)
         return _result_from_reports(request, reports, warnings=warnings)
 
     def _acquire_from_files(
@@ -193,6 +217,8 @@ class HistoricalMarketDataAcquirer:
     def _acquire_from_broker(
         self,
         request: TrainingDataRequest,
+        *,
+        cancel_event: Event | None = None,
     ) -> list[SymbolAcquisitionReport]:
         provider_name = _broker_registry_name(request.market_source.provider)
         adapter = self._create_broker_adapter(provider_name)
@@ -209,11 +235,28 @@ class HistoricalMarketDataAcquirer:
             ),
         )
 
+        # The chunk plan is identical for every symbol (it depends only on the
+        # range, frequency, and session window), so compute it once to size the
+        # shared pacer and report progress.
+        chunks = _plan_chunks(request)
+        pacer = _build_pacer(
+            request=request,
+            chunks_per_symbol=len(chunks),
+            symbol_count=len(request.symbols),
+        )
+
         reports: list[SymbolAcquisitionReport] = []
         try:
             source.connect()
             for symbol in request.symbols:
-                batch = _fetch_chunked_batch(source, request, symbol)
+                batch = _fetch_chunked_batch(
+                    source,
+                    request,
+                    symbol,
+                    chunks=chunks,
+                    pacer=pacer,
+                    cancel_event=cancel_event,
+                )
                 if not batch.records:
                     reports.append(_empty_allowed_report(request, symbol))
                     continue
@@ -455,18 +498,163 @@ def _record_from_file_row(
     )
 
 
+# Interactive Brokers pacing: at most 60 historical requests in any rolling
+# 10-minute window. A small safety margin avoids brushing the limit.
+_PACING_WINDOW_SECONDS = 600.0
+_MAX_REQUESTS_PER_WINDOW = 55
+# Steady spacing that keeps a long job exactly at the window limit without ever
+# front-loading a burst (which would otherwise force a multi-minute stall once
+# the window fills). ~10.9s per request.
+_STEADY_INTERVAL_SECONDS = _PACING_WINDOW_SECONDS / _MAX_REQUESTS_PER_WINDOW
+# Granularity for interruptible sleeps so cancellation is observed promptly.
+_SLEEP_SLICE_SECONDS = 0.25
+
+
+class _RequestPacer:
+    """Rate-limit broker requests within IB's rolling-window pacing limits.
+
+    A single pacer is shared across every symbol in one acquisition so the
+    rolling-window cap reflects IB's per-connection limit rather than resetting
+    per symbol. ``min_spacing`` is raised to a steady interval for large jobs so
+    requests are evenly spaced instead of bursting and then stalling for minutes.
+    """
+
+    def __init__(self, min_spacing: float) -> None:
+        self._min_spacing = max(0.0, min_spacing)
+        self._request_times: deque[float] = deque()
+
+    def wait(self, cancel_event: "Event | None" = None) -> None:
+        """Block until the next request may proceed, honoring cancellation."""
+
+        now = time_module.monotonic()
+        self._evict_expired(now)
+
+        if len(self._request_times) >= _MAX_REQUESTS_PER_WINDOW:
+            wait_for = _PACING_WINDOW_SECONDS - (now - self._request_times[0])
+            self._interruptible_sleep(wait_for, cancel_event)
+            now = time_module.monotonic()
+            self._evict_expired(now)
+
+        if self._min_spacing > 0 and self._request_times:
+            gap = now - self._request_times[-1]
+            self._interruptible_sleep(self._min_spacing - gap, cancel_event)
+            now = time_module.monotonic()
+
+        self._request_times.append(now)
+
+    def _evict_expired(self, now: float) -> None:
+        while (
+            self._request_times
+            and now - self._request_times[0] >= _PACING_WINDOW_SECONDS
+        ):
+            self._request_times.popleft()
+
+    @staticmethod
+    def _interruptible_sleep(seconds: float, cancel_event: "Event | None") -> None:
+        remaining = seconds
+        while remaining > 0:
+            if cancel_event is not None and cancel_event.is_set():
+                return
+            time_module.sleep(min(_SLEEP_SLICE_SECONDS, remaining))
+            remaining -= _SLEEP_SLICE_SECONDS
+
+
+def _plan_chunks(request: TrainingDataRequest) -> list[tuple[datetime, datetime]]:
+    """Return the broker request windows for a request (symbol-independent)."""
+
+    padding = _bar_interval_for_frequency(request.frequency)
+    session = request.market_source.session_window()
+
+    # Each chunk is widened by ``padding`` on both sides below to capture
+    # boundary bars, so shrink the request span by that allowance to keep the
+    # resulting duration within the IB per-bar-size maximum.
+    max_span = _max_request_span(request.frequency) - 2 * padding
+    if max_span <= timedelta(0):
+        max_span = _max_request_span(request.frequency)
+
+    return list(
+        _chunk_ranges(
+            request.start_time,
+            request.end_time,
+            max_span=max_span,
+            session=session if _is_intraday_frequency(request.frequency) else None,
+        )
+    )
+
+
+def _build_pacer(
+    *,
+    request: TrainingDataRequest,
+    chunks_per_symbol: int,
+    symbol_count: int,
+) -> _RequestPacer:
+    """Construct the shared pacer, smoothing spacing for large jobs.
+
+    For jobs whose total request count exceeds the rolling-window cap, the
+    minimum spacing is raised to a steady interval so requests are evenly paced
+    rather than bursting and then stalling for minutes once the window fills.
+    Small jobs keep the faster configured spacing.
+    """
+
+    configured_spacing = request.market_source.request_pacing_seconds
+    total_requests = chunks_per_symbol * symbol_count
+    if total_requests > _MAX_REQUESTS_PER_WINDOW:
+        min_spacing = max(configured_spacing, _STEADY_INTERVAL_SECONDS)
+    else:
+        min_spacing = configured_spacing
+
+    if total_requests > 0:
+        estimated_minutes = (total_requests * min_spacing) / 60.0
+        logger.info(
+            "Sourcing historical market data | symbols=%s frequency=%s "
+            "requests=%d spacing=%.1fs est_minutes=%.1f",
+            ",".join(request.symbols),
+            request.frequency.value,
+            total_requests,
+            min_spacing,
+            estimated_minutes,
+        )
+    return _RequestPacer(min_spacing)
+
+
 def _fetch_chunked_batch(
     source: BrokerDataSource,
     request: TrainingDataRequest,
     symbol: str,
+    *,
+    chunks: Sequence[tuple[datetime, datetime]],
+    pacer: _RequestPacer,
+    cancel_event: Event | None = None,
 ) -> DataBatch:
     records_by_key: dict[tuple[str, datetime], DataRecord] = {}
     padding = _bar_interval_for_frequency(request.frequency)
-    for chunk_start, chunk_end in _chunk_ranges(
-        request.start_time,
-        request.end_time,
-        request.frequency,
-    ):
+    total = len(chunks)
+
+    for index, (chunk_start, chunk_end) in enumerate(chunks, start=1):
+        if cancel_event is not None and cancel_event.is_set():
+            raise MarketDataAcquisitionCancelled(
+                f"Historical market-data acquisition cancelled for '{symbol}' "
+                f"after {index - 1}/{total} requests"
+            )
+
+        # Stagger successive broker requests to stay under IB pacing limits:
+        # a minimum spacing avoids the 6-requests-per-2-seconds rule, and the
+        # rolling window keeps within 60 historical requests per 10 minutes.
+        pacer.wait(cancel_event)
+        if cancel_event is not None and cancel_event.is_set():
+            raise MarketDataAcquisitionCancelled(
+                f"Historical market-data acquisition cancelled for '{symbol}' "
+                f"after {index - 1}/{total} requests"
+            )
+
+        logger.info(
+            "Historical request | symbol=%s chunk=%d/%d window=%s→%s",
+            symbol,
+            index,
+            total,
+            chunk_start.isoformat(),
+            chunk_end.isoformat(),
+        )
         batch = source.fetch_batch(
             symbol=symbol,
             start=chunk_start - padding,
@@ -478,6 +666,12 @@ def _fetch_chunked_batch(
             records_by_key[(symbol, normalized.timestamp)] = normalized
 
     records = sorted(records_by_key.values(), key=lambda item: item.timestamp)
+    logger.info(
+        "Historical source complete | symbol=%s requests=%d bars=%d",
+        symbol,
+        total,
+        len(records),
+    )
     return DataBatch(
         records=records,
         start_time=records[0].timestamp if records else request.start_time,
@@ -505,37 +699,101 @@ def _normalize_record(
 def _chunk_ranges(
     start: datetime,
     end: datetime,
-    frequency: DataFrequency,
+    *,
+    max_span: timedelta,
+    session: tuple[time, time, ZoneInfo] | None = None,
 ) -> Iterable[tuple[datetime, datetime]]:
+    """Yield broker request windows respecting IB duration limits.
+
+    When a trading-session window is supplied, the full range is first split
+    into one window per weekday session (mirroring the legacy day-by-day RTH
+    collection). Every window is then sub-divided so that no single request
+    exceeds ``max_span``, keeping each ``durationStr`` valid (in particular
+    never exceeding 86400 seconds when expressed in the ``S`` unit).
+    """
+
     start_utc = _ensure_utc(start)
     end_utc = _ensure_utc(end)
-    chunk_size = _chunk_size_for_frequency(frequency)
-    current = start_utc
-    while current < end_utc:
-        chunk_end = min(end_utc, current + chunk_size)
+
+    if session is not None:
+        outer_ranges: Iterable[tuple[datetime, datetime]] = _session_day_ranges(
+            start_utc, end_utc, session
+        )
+    else:
+        outer_ranges = ((start_utc, end_utc),)
+
+    for outer_start, outer_end in outer_ranges:
+        yield from _split_span(outer_start, outer_end, max_span)
+
+
+def _split_span(
+    start: datetime,
+    end: datetime,
+    max_span: timedelta,
+) -> Iterable[tuple[datetime, datetime]]:
+    if start >= end:
+        if start == end:
+            yield start, end
+        return
+    current = start
+    while current < end:
+        chunk_end = min(end, current + max_span)
         yield current, chunk_end
-        if chunk_end >= end_utc:
-            break
         current = chunk_end
-    if start_utc == end_utc:
-        yield start_utc, end_utc
 
 
-def _chunk_size_for_frequency(frequency: DataFrequency) -> timedelta:
-    if frequency in {
-        DataFrequency.TICK,
-        DataFrequency.SECOND_1,
-        DataFrequency.SECOND_5,
-        DataFrequency.SECOND_10,
-        DataFrequency.SECOND_30,
-        DataFrequency.MINUTE_1,
-    }:
-        return timedelta(days=7)
+def _session_day_ranges(
+    start: datetime,
+    end: datetime,
+    session: tuple[time, time, ZoneInfo],
+) -> Iterable[tuple[datetime, datetime]]:
+    session_start, session_end, tz = session
+    day = start.astimezone(tz).date()
+    last_day = end.astimezone(tz).date()
+    while day <= last_day:
+        # Skip weekends; IB returns no RTH bars and they only waste pacing.
+        if day.weekday() < 5:
+            window_start = datetime.combine(
+                day, session_start, tzinfo=tz
+            ).astimezone(UTC)
+            window_end = datetime.combine(day, session_end, tzinfo=tz).astimezone(UTC)
+            clamped_start = max(window_start, start)
+            clamped_end = min(window_end, end)
+            if clamped_start < clamped_end:
+                yield clamped_start, clamped_end
+        day += timedelta(days=1)
+
+
+def _is_intraday_frequency(frequency: DataFrequency) -> bool:
+    """Return whether a frequency produces intraday bars (sub-daily)."""
+
+    return frequency not in {DataFrequency.DAY_1, DataFrequency.IRREGULAR}
+
+
+def _max_request_span(frequency: DataFrequency) -> timedelta:
+    """Return the maximum duration permitted per request for a bar size.
+
+    Values follow the Interactive Brokers historical-data step-size table so
+    each request's duration string is independently valid.
+    """
+
+    if frequency in {DataFrequency.TICK, DataFrequency.SECOND_1}:
+        return timedelta(seconds=1800)
+    if frequency == DataFrequency.SECOND_5:
+        return timedelta(seconds=3600)
+    if frequency == DataFrequency.SECOND_10:
+        return timedelta(seconds=14400)
+    if frequency == DataFrequency.SECOND_30:
+        return timedelta(seconds=28800)
+    if frequency == DataFrequency.MINUTE_1:
+        return timedelta(days=1)
     if frequency in {DataFrequency.MINUTE_5, DataFrequency.MINUTE_15}:
-        return timedelta(days=30)
+        return timedelta(days=7)
     if frequency == DataFrequency.HOUR_1:
+        return timedelta(days=30)
+    if frequency == DataFrequency.DAY_1:
         return timedelta(days=365)
-    return timedelta(days=3650)
+    return timedelta(days=1)
 
 
 def _bar_interval_for_frequency(frequency: DataFrequency) -> timedelta:
@@ -657,6 +915,7 @@ __all__ = [
     "AcquisitionResult",
     "AcquisitionStatus",
     "HistoricalMarketDataAcquirer",
+    "MarketDataAcquisitionCancelled",
     "MarketDataAcquisitionError",
     "SymbolAcquisitionReport",
 ]

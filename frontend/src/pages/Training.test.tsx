@@ -293,6 +293,46 @@ describe('Training', () => {
     });
   });
 
+  it('continues training from a selected generation when opted in', async () => {
+    const user = userEvent.setup();
+    renderTraining();
+
+    await screen.findByLabelText(/Training model/);
+    // Wait for the model's generations to load so the toggle is enabled.
+    const continueToggle = await screen.findByLabelText(/Continue training from a previous/);
+    await waitFor(() => expect(continueToggle).not.toBeDisabled());
+    await user.click(continueToggle);
+
+    const generationSelect = await screen.findByLabelText(/Continue from generation/);
+    await user.selectOptions(generationSelect, 'generation-1');
+
+    const startButton = screen.getByRole('button', { name: /Start training/ });
+    await waitFor(() => expect(startButton).not.toBeDisabled());
+    await user.click(startButton);
+
+    await waitFor(() => expect(trainingApi.createJob).toHaveBeenCalledTimes(1));
+    expect(trainingApi.createJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model_id: 'core-1',
+        continue_from_generation_id: 'generation-1',
+      }),
+    );
+  });
+
+  it('does not send a continue id for a fresh run', async () => {
+    const user = userEvent.setup();
+    renderTraining();
+
+    await screen.findByLabelText(/Training model/);
+    const startButton = screen.getByRole('button', { name: /Start training/ });
+    await waitFor(() => expect(startButton).not.toBeDisabled());
+    await user.click(startButton);
+
+    await waitFor(() => expect(trainingApi.createJob).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(trainingApi.createJob).mock.calls[0]?.[0];
+    expect(payload).not.toHaveProperty('continue_from_generation_id');
+  });
+
   it('displays running and completed job state from API payloads', async () => {
     renderTraining();
 

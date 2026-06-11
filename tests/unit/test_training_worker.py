@@ -16,11 +16,13 @@ from algotrading.api.schemas.training import (
 )
 from algotrading.api.workers.training_worker import (
     DefaultTrainingExecutor,
+    TrainingCancelledError,
     TrainingExecutionResult,
     TrainingExecutorConfigurationError,
     TrainingJobContext,
     TrainingProgressUpdate,
     TrainingWorker,
+    _factory_accepts_cancellation,
 )
 
 
@@ -109,6 +111,143 @@ def test_default_executor_requires_dataset_factory(tmp_path: Any) -> None:
         executor.execute(context)
 
     assert "dataset_factory" in str(exc_info.value)
+
+
+def test_factory_accepts_cancellation_detection() -> None:
+    """The executor detects whether a factory accepts a cancellation kwarg."""
+
+    def with_cancellation(model, data_config, *, cancellation=None):  # noqa: ANN001
+        return None
+
+    def with_var_kwargs(model, data_config, **kwargs):  # noqa: ANN001
+        return None
+
+    def without_cancellation(model, data_config):  # noqa: ANN001
+        return None
+
+    assert _factory_accepts_cancellation(with_cancellation) is True
+    assert _factory_accepts_cancellation(with_var_kwargs) is True
+    assert _factory_accepts_cancellation(without_cancellation) is False
+
+
+def test_executor_passes_cancellation_to_environment_factory(tmp_path: Any) -> None:
+    """The executor forwards the cancellation event and propagates cancel."""
+
+    cancel = Event()
+    cancel.set()
+    seen: dict[str, Any] = {}
+
+    def factory(model, data_config, *, cancellation=None):  # noqa: ANN001
+        seen["cancellation"] = cancellation
+        if cancellation is not None and cancellation.is_set():
+            raise TrainingCancelledError("data acquisition cancelled")
+        return object()
+
+    executor = DefaultTrainingExecutor(
+        models_dir=tmp_path, environment_factory=factory
+    )
+    model = _build_model()
+    job = _build_job(model.model_id)
+    context = TrainingJobContext(
+        job=job,
+        request=TrainingJobCreate(model_id=model.model_id, total_timesteps=10),
+        model=model,
+        cancellation_event=cancel,
+        progress_callback=lambda update: None,
+        generation_tracker=None,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(TrainingCancelledError):
+        executor.execute(context)
+    assert seen["cancellation"] is cancel
+
+
+def test_executor_supports_legacy_two_arg_factory(tmp_path: Any) -> None:
+    """A factory without a cancellation kwarg is still invoked correctly."""
+
+    calls: list[tuple[Any, Any]] = []
+
+    def legacy_factory(model, data_config):  # noqa: ANN001
+        calls.append((model, data_config))
+        raise TrainingCancelledError("stop early to avoid trainer setup")
+
+    executor = DefaultTrainingExecutor(
+        models_dir=tmp_path, environment_factory=legacy_factory
+    )
+    model = _build_model()
+    job = _build_job(model.model_id)
+    context = TrainingJobContext(
+        job=job,
+        request=TrainingJobCreate(model_id=model.model_id, total_timesteps=10),
+        model=model,
+        cancellation_event=Event(),
+        progress_callback=lambda update: None,
+        generation_tracker=None,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(TrainingCancelledError):
+        executor.execute(context)
+    assert len(calls) == 1
+
+
+class _StubGeneration:
+    def __init__(self, model_path: str | None) -> None:
+        self.model_path = model_path
+
+
+class _StubGenerationTracker:
+    def __init__(self, generation: Any | None) -> None:
+        self._generation = generation
+        self.requested: list[str] = []
+
+    def get_generation(self, generation_id: str) -> Any | None:
+        self.requested.append(generation_id)
+        return self._generation
+
+
+def _context_with_continue(
+    continue_id: str | None, tracker: Any
+) -> TrainingJobContext:
+    model = _build_model()
+    return TrainingJobContext(
+        job=_build_job(model.model_id),
+        request=TrainingJobCreate(
+            model_id=model.model_id,
+            total_timesteps=10,
+            continue_from_generation_id=continue_id,
+        ),
+        model=model,
+        cancellation_event=Event(),
+        progress_callback=lambda update: None,
+        generation_tracker=tracker,
+    )
+
+
+def test_resolve_continue_artifact_returns_none_without_id(tmp_path: Any) -> None:
+    """No continue id means a from-scratch run (no artifact)."""
+
+    executor = DefaultTrainingExecutor(models_dir=tmp_path)
+    context = _context_with_continue(None, _StubGenerationTracker(None))
+    assert executor._resolve_continue_artifact(context) is None
+
+
+def test_resolve_continue_artifact_returns_generation_path(tmp_path: Any) -> None:
+    """A valid continue generation resolves to its saved artifact path."""
+
+    executor = DefaultTrainingExecutor(models_dir=tmp_path)
+    tracker = _StubGenerationTracker(_StubGeneration("/models/m/gen.zip"))
+    context = _context_with_continue("gen-1", tracker)
+    assert executor._resolve_continue_artifact(context) == "/models/m/gen.zip"
+    assert tracker.requested == ["gen-1"]
+
+
+def test_resolve_continue_artifact_raises_when_missing(tmp_path: Any) -> None:
+    """A continue id with no resolvable artifact fails loudly."""
+
+    executor = DefaultTrainingExecutor(models_dir=tmp_path)
+    context = _context_with_continue("gen-x", _StubGenerationTracker(None))
+    with pytest.raises(TrainingExecutorConfigurationError):
+        executor._resolve_continue_artifact(context)
 
 
 class _FakeService:

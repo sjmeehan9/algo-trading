@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+from threading import Event
 
 from algotrading.api.config import APIConfig
 from algotrading.api.schemas.data_sources import (
@@ -62,8 +63,18 @@ class DataAcquisitionService:
         self,
         request: TrainingDataRequest | Mapping[str, object],
         data_config: Mapping[str, object] | None = None,
+        *,
+        cancel_event: Event | None = None,
     ) -> AcquisitionResult:
-        """Ensure historical market bars exist for a canonical or loose request."""
+        """Ensure historical market bars exist for a canonical or loose request.
+
+        Args:
+            request: Canonical or loose market-data request.
+            data_config: Optional overrides merged onto the request.
+            cancel_event: Optional event signalling that broker acquisition
+                should stop; checked between requests so a long-running broker
+                source can be interrupted cleanly.
+        """
 
         canonical_request = _coerce_request(request, data_config)
         broker_name = _broker_settings_name(canonical_request.market_source.provider)
@@ -75,7 +86,7 @@ class DataAcquisitionService:
                 broker_name
             ),
         )
-        return acquirer.acquire(canonical_request)
+        return acquirer.acquire(canonical_request, cancel_event=cancel_event)
 
     def ensure_news_data(
         self,

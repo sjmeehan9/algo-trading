@@ -169,6 +169,140 @@ async def test_create_job_validates_model_exists(
         await service.create_job(TrainingJobCreate(model_id="nonexistent"))
 
 
+def _completed_generation(
+    tracker: GenerationTracker,
+    model_id: str,
+    artifact_path: str,
+) -> str:
+    """Create a completed generation with a recorded artifact path."""
+
+    generation = tracker.start_generation(model_id=model_id, hyperparameters={})
+    tracker.complete_generation(
+        generation_id=generation.generation_id,
+        training_metrics=TrainingMetrics(
+            final_reward=1.0,
+            mean_reward=1.0,
+            std_reward=0.0,
+            episodes_completed=1,
+            timesteps_trained=100,
+            training_time_seconds=1.0,
+        ),
+        model_path=artifact_path,
+    )
+    return generation.generation_id
+
+
+def _build_service(
+    tmp_path: Path, model_service: ModelService, executor: Any
+) -> TrainingService:
+    worker = TrainingWorker(executor=executor, run_in_executor=_inline_executor)
+    return TrainingService(
+        ws_manager=WebSocketManager(),
+        model_service=model_service,
+        generation_tracker=model_service.generation_tracker,
+        worker=worker,
+        jobs_path=tmp_path / "jobs.json",
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_job_rejects_unknown_continue_generation(
+    tmp_path: Path, model_service: ModelService, model_id: str
+) -> None:
+    """Continuing from a non-existent generation is rejected up front."""
+
+    service = _build_service(tmp_path, model_service, _FakeExecutor())
+    with pytest.raises(TrainingServiceError, match="not found"):
+        await service.create_job(
+            TrainingJobCreate(
+                model_id=model_id,
+                total_timesteps=100,
+                continue_from_generation_id="generation-missing",
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_job_rejects_continue_generation_without_artifact(
+    tmp_path: Path, model_service: ModelService, model_id: str
+) -> None:
+    """Continuing from a generation whose artifact is missing is rejected."""
+
+    generation_id = _completed_generation(
+        model_service.generation_tracker,
+        model_id,
+        artifact_path=str(tmp_path / "missing" / "model.zip"),
+    )
+    service = _build_service(tmp_path, model_service, _FakeExecutor())
+    with pytest.raises(TrainingServiceError, match="missing"):
+        await service.create_job(
+            TrainingJobCreate(
+                model_id=model_id,
+                total_timesteps=100,
+                continue_from_generation_id=generation_id,
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_job_rejects_continue_generation_from_other_model(
+    tmp_path: Path, model_service: ModelService, model_id: str
+) -> None:
+    """Continuing from another model's generation is rejected."""
+
+    other_model_id = _create_core_model(model_service)
+    artifact = tmp_path / "other.zip"
+    artifact.write_bytes(b"artifact")
+    generation_id = _completed_generation(
+        model_service.generation_tracker, other_model_id, str(artifact)
+    )
+    service = _build_service(tmp_path, model_service, _FakeExecutor())
+    with pytest.raises(TrainingServiceError, match="different model"):
+        await service.create_job(
+            TrainingJobCreate(
+                model_id=model_id,
+                total_timesteps=100,
+                continue_from_generation_id=generation_id,
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_continue_training_records_child_generation(
+    tmp_path: Path, model_service: ModelService, model_id: str
+) -> None:
+    """A continued job carries the source id and records a child generation."""
+
+    artifact = tmp_path / "source.zip"
+    artifact.write_bytes(b"artifact")
+    source_generation_id = _completed_generation(
+        model_service.generation_tracker, model_id, str(artifact)
+    )
+    service = _build_service(tmp_path, model_service, _FakeExecutor())
+
+    await service.start()
+    try:
+        job = await service.create_job(
+            TrainingJobCreate(
+                model_id=model_id,
+                total_timesteps=100,
+                continue_from_generation_id=source_generation_id,
+            )
+        )
+        assert job.continue_from_generation_id == source_generation_id
+        await _wait_for_status(service, job.job_id, TrainingJobStatus.COMPLETED)
+    finally:
+        await service.stop()
+
+    generations = model_service.generation_tracker.get_generations_for_model(model_id)
+    children = [
+        generation
+        for generation in generations
+        if generation.parent_generation_id == source_generation_id
+    ]
+    assert len(children) == 1
+
+
 @pytest.mark.asyncio
 async def test_job_runs_to_completion_and_persists(
     tmp_path: Path, model_service: ModelService, model_id: str

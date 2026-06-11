@@ -1,3 +1,6 @@
+# Local app data
+data/*
+
 .DS_Store
 
 # Byte-compiled / optimized / DLL files

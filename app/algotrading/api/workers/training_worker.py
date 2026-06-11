@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from dataclasses import dataclass, field
@@ -14,7 +15,6 @@ from algotrading.api.schemas.models import ModelConfigResponse, ModelType
 from algotrading.api.schemas.training import (
     TrainingJob,
     TrainingJobCreate,
-    TrainingJobStatus,
 )
 from algotrading.src.models.tracking import (
     EvaluationMetrics,
@@ -77,8 +77,25 @@ class TrainingExecutor(Protocol):
         """Run the configured training job and return its result."""
 
 
-EnvironmentFactory = Callable[[ModelConfigResponse, dict[str, Any]], Any]
+# Environment factories accept ``(model, data_config)`` and may optionally
+# accept a keyword ``cancellation`` event used to interrupt long data sourcing.
+EnvironmentFactory = Callable[..., Any]
 DatasetFactory = Callable[[ModelConfigResponse, dict[str, Any]], tuple[Any, Any]]
+
+
+def _factory_accepts_cancellation(factory: Callable[..., Any]) -> bool:
+    """Return whether an environment factory accepts a ``cancellation`` kwarg."""
+
+    try:
+        parameters = inspect.signature(factory).parameters
+    except (TypeError, ValueError):
+        return False
+    if "cancellation" in parameters:
+        return True
+    return any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    )
 
 
 class DefaultTrainingExecutor:
@@ -125,6 +142,51 @@ class DefaultTrainingExecutor:
             f"Unsupported model type for training: {model_type.value}"
         )
 
+    def _build_environment(
+        self,
+        model: ModelConfigResponse,
+        data_config: dict[str, Any],
+        cancellation: Event,
+    ) -> Any:
+        """Invoke the environment factory, passing cancellation when supported.
+
+        The default factory accepts a ``cancellation`` keyword so long-running
+        data sourcing can be interrupted; simpler factories (used in tests) take
+        only ``(model, data_config)`` and are called without it.
+        """
+
+        factory = self._environment_factory
+        if factory is None:
+            raise TrainingExecutorConfigurationError(
+                "environment_factory must be configured to train RL models via API"
+            )
+        if _factory_accepts_cancellation(factory):
+            return factory(model, data_config, cancellation=cancellation)
+        return factory(model, data_config)
+
+    def _resolve_continue_artifact(
+        self, context: TrainingJobContext
+    ) -> str | None:
+        """Return the artifact path to warm-start from, or ``None`` for fresh.
+
+        The request's ``continue_from_generation_id`` is validated when the job
+        is created; this re-resolves the saved artifact at execution time and
+        fails loudly if it has since become unavailable.
+        """
+
+        generation_id = context.request.continue_from_generation_id
+        if not generation_id:
+            return None
+
+        tracker = context.generation_tracker
+        generation = tracker.get_generation(generation_id) if tracker else None
+        if generation is None or not generation.model_path:
+            raise TrainingExecutorConfigurationError(
+                f"Cannot continue training: generation '{generation_id}' has no "
+                "saved artifact"
+            )
+        return generation.model_path
+
     def _execute_rl(self, context: TrainingJobContext) -> TrainingExecutionResult:
         """Execute an RL training job using `StableBaselines3Trainer`."""
 
@@ -155,7 +217,9 @@ class DefaultTrainingExecutor:
 
         factory_data_config = dict(context.request.data_config)
         factory_data_config.setdefault("total_timesteps", total_timesteps)
-        env = self._environment_factory(context.model, factory_data_config)
+        env = self._build_environment(
+            context.model, factory_data_config, context.cancellation_event
+        )
 
         hyperparameters = dict(context.model.hyperparameters)
         learning_rate = _coerce_optional_float(hyperparameters.get("learning_rate"))
@@ -177,7 +241,17 @@ class DefaultTrainingExecutor:
         )
 
         trainer = StableBaselines3Trainer(algorithm=algorithm, policy=policy)
-        trainer.create_model(env=env, config=config)
+        continue_artifact = self._resolve_continue_artifact(context)
+        if continue_artifact is not None:
+            logger.info(
+                "Continuing RL training | model_id=%s generation=%s artifact=%s",
+                context.model.model_id,
+                context.request.continue_from_generation_id,
+                continue_artifact,
+            )
+            trainer.load(continue_artifact, env=env)
+        else:
+            trainer.create_model(env=env, config=config)
 
         cancellation = context.cancellation_event
         progress_callback = context.progress_callback
@@ -199,7 +273,11 @@ class DefaultTrainingExecutor:
             )
             return True
 
-        result = trainer.train(config=config, callback=_trainer_callback)
+        result = trainer.train(
+            config=config,
+            callback=_trainer_callback,
+            reset_num_timesteps=continue_artifact is None,
+        )
 
         if cancellation.is_set():
             raise TrainingCancelledError("Training cancelled by request")

@@ -7,12 +7,22 @@ from datetime import UTC, date, datetime, time
 from enum import Enum
 from pathlib import Path
 from typing import TypeAlias
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from algotrading.src.broker.models import InstrumentType
 from algotrading.src.data_pipeline import DataFrequency, NewsQuery
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 RawConfig: TypeAlias = Mapping[str, object] | None
+
+# Exchange-local timezone assumed for trading-session windows when the caller
+# does not specify one. US equities default to US/Eastern.
+DEFAULT_SESSION_TIMEZONE = "America/New_York"
+
+# Default delay (seconds) between successive broker historical-data requests.
+# Keeps multi-chunk acquisition comfortably under IB pacing limits
+# (no more than 60 requests in any 10-minute window).
+DEFAULT_REQUEST_PACING_SECONDS = 1.0
 
 
 class DataSourceConfigError(ValueError):
@@ -157,6 +167,12 @@ class MarketDataSourceConfig(BaseModel):
     explicit_files: dict[str, str] = Field(default_factory=dict)
     input_paths: list[str] = Field(default_factory=list)
     allow_empty_symbols: list[str] = Field(default_factory=list)
+    session_start: str | None = None
+    session_end: str | None = None
+    session_timezone: str = DEFAULT_SESSION_TIMEZONE
+    request_pacing_seconds: float = Field(
+        default=DEFAULT_REQUEST_PACING_SECONDS, ge=0.0
+    )
 
     @field_validator("provider", mode="before")
     @classmethod
@@ -191,6 +207,60 @@ class MarketDataSourceConfig(BaseModel):
             return None
         normalized = str(value).strip()
         return normalized or None
+
+    @field_validator("session_start", "session_end", mode="before")
+    @classmethod
+    def _normalize_session_time(cls, value: object) -> str | None:
+        """Validate and normalize an optional HH:MM session boundary."""
+
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        return _parse_session_time(text).strftime("%H:%M")
+
+    @field_validator("session_timezone", mode="before")
+    @classmethod
+    def _normalize_session_timezone(cls, value: object) -> str:
+        """Validate the session timezone, falling back to the US/Eastern default."""
+
+        if value is None:
+            return DEFAULT_SESSION_TIMEZONE
+        text = str(value).strip()
+        if not text:
+            return DEFAULT_SESSION_TIMEZONE
+        try:
+            ZoneInfo(text)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"Unknown session_timezone '{text}'") from exc
+        return text
+
+    @model_validator(mode="after")
+    def _validate_session_window(self) -> MarketDataSourceConfig:
+        """Require both session bounds together and a non-empty ordering."""
+
+        if (self.session_start is None) != (self.session_end is None):
+            raise ValueError(
+                "session_start and session_end must be provided together"
+            )
+        if self.session_start is not None and self.session_end is not None:
+            start = _parse_session_time(self.session_start)
+            end = _parse_session_time(self.session_end)
+            if end <= start:
+                raise ValueError("session_end must be after session_start")
+        return self
+
+    def session_window(self) -> tuple[time, time, ZoneInfo] | None:
+        """Return the parsed session window, or ``None`` when unconfigured."""
+
+        if self.session_start is None or self.session_end is None:
+            return None
+        return (
+            _parse_session_time(self.session_start),
+            _parse_session_time(self.session_end),
+            ZoneInfo(self.session_timezone),
+        )
 
     @field_validator("explicit_files", mode="before")
     @classmethod
@@ -325,6 +395,40 @@ class MarketDataSourceConfig(BaseModel):
                 nested,
                 "allow_empty_symbols",
                 default=_first_present(payload, "allow_empty_symbols", default=[]),
+            ),
+            session_start=_first_present(
+                nested,
+                "session_start",
+                "session_start_time",
+                default=_first_present(
+                    payload, "session_start", "session_start_time"
+                ),
+            ),
+            session_end=_first_present(
+                nested,
+                "session_end",
+                "session_end_time",
+                default=_first_present(payload, "session_end", "session_end_time"),
+            ),
+            session_timezone=_first_present(
+                nested,
+                "session_timezone",
+                "session_tz",
+                default=_first_present(
+                    payload,
+                    "session_timezone",
+                    "session_tz",
+                    default=DEFAULT_SESSION_TIMEZONE,
+                ),
+            ),
+            request_pacing_seconds=_first_present(
+                nested,
+                "request_pacing_seconds",
+                default=_first_present(
+                    payload,
+                    "request_pacing_seconds",
+                    default=DEFAULT_REQUEST_PACING_SECONDS,
+                ),
             ),
         )
 
@@ -867,6 +971,20 @@ def bar_size_for_frequency(frequency: DataFrequency) -> str:
     """Return the broker bar-size string matching a DataFrequency."""
 
     return _BAR_SIZE_BY_FREQUENCY[frequency]
+
+
+def _parse_session_time(value: str) -> time:
+    """Parse an ``HH:MM`` or ``HH:MM:SS`` session boundary into a ``time``."""
+
+    text = str(value).strip()
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            return datetime.strptime(text, fmt).time()
+        except ValueError:
+            continue
+    raise ValueError(
+        f"session time must be in HH:MM or HH:MM:SS format, got '{value}'"
+    )
 
 
 def _copy_mapping(config: RawConfig) -> dict[str, object]:

@@ -122,6 +122,41 @@ def test_short_dqn_training_save_load_with_replay_buffer(tmp_path: Path) -> None
 
 
 @pytest.mark.slow
+def test_continue_training_warm_starts_from_saved_artifact(tmp_path: Path) -> None:
+    """Loading an artifact and training with reset_num_timesteps=False continues."""
+
+    env = _TinyTradingEnv()
+    trainer = StableBaselines3Trainer(
+        algorithm=SB3Algorithm.PPO, policy="MultiInputPolicy"
+    )
+    config = TrainingConfig(
+        total_timesteps=128,
+        learning_rate=0.0003,
+        batch_size=32,
+        n_steps=32,
+        custom_params={"verbose": 0},
+    )
+    trainer.create_model(env, config)
+    trainer.train(config)
+    model_base = tmp_path / "ppo_artifacts" / "model"
+    trainer.save(str(model_base))
+
+    # A fresh trainer continues from the saved weights instead of re-initialising.
+    continued = StableBaselines3Trainer(
+        algorithm=SB3Algorithm.PPO, policy="MultiInputPolicy"
+    )
+    continued.load(str(model_base), env=env)
+    assert continued._model is not None
+    timesteps_before = continued._model.num_timesteps
+    assert timesteps_before >= 128
+
+    continued.train(config, reset_num_timesteps=False)
+
+    # The counter accumulated rather than resetting, proving warm-start.
+    assert continued._model.num_timesteps > timesteps_before
+
+
+@pytest.mark.slow
 def test_evaluate_returns_non_empty_metrics() -> None:
     """evaluate returns aggregate metrics and per-episode detail dataframe."""
 

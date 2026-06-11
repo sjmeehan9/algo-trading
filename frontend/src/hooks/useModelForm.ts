@@ -5,6 +5,9 @@ import { z } from 'zod';
 import {
   DEFAULT_ENVIRONMENT_CONFIG,
   DEFAULT_RL_ALGORITHM,
+  DEFAULT_SESSION_END,
+  DEFAULT_SESSION_START,
+  DEFAULT_SESSION_TIMEZONE,
   DEFAULT_TRAINING_SYMBOLS,
   getAlgorithmDefinition,
   getDefaultHyperparameters,
@@ -43,6 +46,10 @@ export const coreRLModelSchema = z
       start_date: z.string().min(1, 'Start date is required'),
       end_date: z.string().min(1, 'End date is required'),
       data_frequency: z.string().min(1, 'Data frequency is required'),
+      restrict_to_session: z.boolean().default(false),
+      session_start: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM').default(DEFAULT_SESSION_START),
+      session_end: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM').default(DEFAULT_SESSION_END),
+      session_timezone: z.string().min(1, 'Timezone is required').default(DEFAULT_SESSION_TIMEZONE),
     }),
     supporting_model_ids: z.array(z.string()),
     strategy_ids: z.array(z.string()),
@@ -67,6 +74,17 @@ export const coreRLModelSchema = z
         code: z.ZodIssueCode.custom,
         message: 'End date must be on or after start date',
         path: ['training_data', 'end_date'],
+      });
+    }
+
+    if (
+      value.training_data.restrict_to_session &&
+      value.training_data.session_end <= value.training_data.session_start
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Session end must be after session start',
+        path: ['training_data', 'session_end'],
       });
     }
   });
@@ -162,6 +180,10 @@ export const getDefaultCoreRLFormValues = (): CoreRLModelFormData => {
       start_date: toDateInputValue(startDate),
       end_date: toDateInputValue(endDate),
       data_frequency: '1m',
+      restrict_to_session: false,
+      session_start: DEFAULT_SESSION_START,
+      session_end: DEFAULT_SESSION_END,
+      session_timezone: DEFAULT_SESSION_TIMEZONE,
     },
     supporting_model_ids: [],
     strategy_ids: [],
@@ -197,6 +219,18 @@ export const modelResponseToCoreRLFormData = (model: ModelConfigResponse): CoreR
         trainingData,
         'data_frequency',
         defaults.training_data.data_frequency,
+      ),
+      restrict_to_session: Boolean(trainingData.session_start && trainingData.session_end),
+      session_start: getString(
+        trainingData,
+        'session_start',
+        defaults.training_data.session_start,
+      ),
+      session_end: getString(trainingData, 'session_end', defaults.training_data.session_end),
+      session_timezone: getString(
+        trainingData,
+        'session_timezone',
+        defaults.training_data.session_timezone,
       ),
     },
     supporting_model_ids: [...(model.supporting_model_ids ?? [])],
@@ -257,6 +291,15 @@ export const coreRLFormDataToCreatePayload = (formData: CoreRLModelFormData): Mo
       start_date: formData.training_data.start_date,
       end_date: formData.training_data.end_date,
       data_frequency: formData.training_data.data_frequency,
+      // Only send the session window when explicitly enabled; omitting these
+      // keys leaves the backend on full-day (useRTH) acquisition.
+      ...(formData.training_data.restrict_to_session
+        ? {
+            session_start: formData.training_data.session_start,
+            session_end: formData.training_data.session_end,
+            session_timezone: formData.training_data.session_timezone,
+          }
+        : {}),
     },
     supporting_model_ids: [...formData.supporting_model_ids],
     strategy_ids: [...formData.strategy_ids],

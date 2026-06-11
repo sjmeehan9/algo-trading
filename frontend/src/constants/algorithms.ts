@@ -65,6 +65,24 @@ export const ACTION_SPACE_OPTIONS: SelectOption[] = [
   { value: 'continuous', label: 'Continuous allocation' },
 ];
 
+/** Default exchange-local session window (US equities regular trading hours). */
+export const DEFAULT_SESSION_START = '09:30';
+export const DEFAULT_SESSION_END = '15:30';
+export const DEFAULT_SESSION_TIMEZONE = 'America/New_York';
+
+/** Common exchange timezones offered for the trading-session window. */
+export const SESSION_TIMEZONES: SelectOption[] = [
+  { value: 'America/New_York', label: 'New York (US Eastern)' },
+  { value: 'America/Chicago', label: 'Chicago (US Central)' },
+  { value: 'America/Los_Angeles', label: 'Los Angeles (US Pacific)' },
+  { value: 'Europe/London', label: 'London' },
+  { value: 'Europe/Frankfurt', label: 'Frankfurt' },
+  { value: 'Asia/Tokyo', label: 'Tokyo' },
+  { value: 'Asia/Hong_Kong', label: 'Hong Kong' },
+  { value: 'Australia/Sydney', label: 'Sydney' },
+  { value: 'UTC', label: 'UTC' },
+];
+
 export const REWARD_FUNCTIONS: RewardFunctionDef[] = [
   {
     id: 'profit_seeker',

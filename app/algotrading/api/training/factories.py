@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 import pandas as pd
@@ -16,8 +17,13 @@ from algotrading.api.schemas.data_sources import (
 from algotrading.api.schemas.models import ModelConfigResponse, ModelType
 from algotrading.api.services.data_acquisition_service import DataAcquisitionService
 from algotrading.api.services.model_service import ModelService
-from algotrading.api.workers.training_worker import DatasetFactory, EnvironmentFactory
+from algotrading.api.workers.training_worker import (
+    DatasetFactory,
+    EnvironmentFactory,
+    TrainingCancelledError,
+)
 from algotrading.src.broker.models import InstrumentType
+from algotrading.src.data_pipeline.acquisition import MarketDataAcquisitionCancelled
 from algotrading.src.data_pipeline.storage import StoredMarketData
 from algotrading.src.data_sourcing.state_builder import StateBuilder
 from algotrading.src.envs.trading_env import TradingEnv
@@ -93,7 +99,12 @@ def build_environment_factory(
 
     root = project_root or Path(__file__).resolve().parents[4]
 
-    def _factory(model: ModelConfigResponse, data_config: dict[str, Any]) -> TradingEnv:
+    def _factory(
+        model: ModelConfigResponse,
+        data_config: dict[str, Any],
+        *,
+        cancellation: Event | None = None,
+    ) -> TradingEnv:
         if model.model_type == ModelType.SUPPORTING_RL:
             return build_supporting_rl_environment(
                 model=model,
@@ -101,6 +112,7 @@ def build_environment_factory(
                 data_service=data_service,
                 model_service=model_service,
                 project_root=root,
+                cancel_event=cancellation,
             )
         return build_core_rl_environment(
             model=model,
@@ -108,6 +120,7 @@ def build_environment_factory(
             data_service=data_service,
             model_service=model_service,
             project_root=root,
+            cancel_event=cancellation,
         )
 
     return _factory
@@ -145,6 +158,7 @@ def build_core_rl_environment(
     data_service: DataAcquisitionService,
     model_service: ModelService,
     project_root: Path | None = None,
+    cancel_event: Event | None = None,
 ) -> TradingEnv:
     """Build a `TradingEnv` for one core RL API training job."""
 
@@ -155,6 +169,7 @@ def build_core_rl_environment(
         model_service=model_service,
         project_root=project_root,
         single_pass=False,
+        cancel_event=cancel_event,
     ).env
 
 
@@ -172,6 +187,7 @@ def build_supporting_rl_environment(
     data_service: DataAcquisitionService,
     model_service: ModelService,
     project_root: Path | None = None,
+    cancel_event: Event | None = None,
 ) -> TradingEnv:
     """Build a market-data `TradingEnv` for one supporting RL training job.
 
@@ -213,6 +229,7 @@ def build_supporting_rl_environment(
         model_service=model_service,
         project_root=project_root,
         single_pass=False,
+        cancel_event=cancel_event,
     ).env
 
 
@@ -260,6 +277,7 @@ def build_trading_environment(
     project_root: Path | None = None,
     single_pass: bool = False,
     request: TrainingDataRequest | None = None,
+    cancel_event: Event | None = None,
 ) -> BuiltTradingEnvironment:
     """Build a `TradingEnv` from sourced market data for training or replay.
 
@@ -308,7 +326,10 @@ def build_trading_environment(
         )
     _validate_single_symbol(request)
 
-    data_service.ensure_market_data(request)
+    try:
+        data_service.ensure_market_data(request, cancel_event=cancel_event)
+    except MarketDataAcquisitionCancelled as exc:
+        raise TrainingCancelledError(str(exc)) from exc
     if request.news_source.enabled:
         data_service.ensure_news_data(request, model=model)
 
