@@ -137,7 +137,11 @@ class TradingSessionManager:
         )
 
         broker_adapter = self._create_broker(config.broker_name)
-        inference_pipeline = await self._build_inference_pipeline(config)
+        try:
+            inference_pipeline = await self._build_inference_pipeline(config)
+        except Exception:
+            self._disconnect_broker(broker_adapter)
+            raise
         session = TradingSession(
             session_id=str(uuid4()),
             config=config,
@@ -216,7 +220,11 @@ class TradingSessionManager:
     async def _recover_session(self, session_data: dict[str, object]) -> None:
         config = SessionConfig.from_dict(dict(session_data["config"]))
         broker_adapter = self._create_broker(config.broker_name)
-        inference_pipeline = await self._build_inference_pipeline(config)
+        try:
+            inference_pipeline = await self._build_inference_pipeline(config)
+        except Exception:
+            self._disconnect_broker(broker_adapter)
+            raise
         session = TradingSession.from_record(
             session_data,
             broker=broker_adapter,
@@ -231,6 +239,12 @@ class TradingSessionManager:
             session.session_id,
             session.status.value,
         )
+
+    def _disconnect_broker(self, broker: BrokerAdapter) -> None:
+        try:
+            broker.disconnect()
+        except Exception:
+            logger.exception("Failed to disconnect broker after session setup failure")
 
     def _create_broker(self, broker_name: str) -> BrokerAdapter:
         if self.broker_factory is not None:

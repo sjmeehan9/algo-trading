@@ -247,6 +247,45 @@ async def test_multiple_sessions_use_independent_brokers(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
+async def test_failed_pipeline_build_disconnects_broker(tmp_path: Path) -> None:
+    """Broker connections must be released when pipeline construction fails."""
+
+    brokers: list[_RecordingBroker] = []
+
+    def broker_factory(broker_name: str) -> _RecordingBroker:
+        del broker_name
+        broker = _RecordingBroker()
+        brokers.append(broker)
+        return broker
+
+    def failing_pipeline_factory(config: SessionConfig) -> _DecisionPipeline:
+        del config
+        raise RuntimeError("pipeline build failed")
+
+    manager = TradingSessionManager(
+        broker_registry=BrokerRegistry.isolated(include_builtins=False),
+        model_service=object(),
+        deployment_validator=_Validator(),  # type: ignore[arg-type]
+        persistence=SessionPersistence(tmp_path / "sessions"),
+        broker_factory=broker_factory,
+        pipeline_factory=failing_pipeline_factory,
+    )
+
+    with pytest.raises(RuntimeError, match="pipeline build failed"):
+        await manager.create_session(
+            model_id="core-1",
+            generation_id="gen-1",
+            mode="paper",
+            broker="mock",
+            symbols=["AAPL"],
+        )
+
+    assert len(brokers) == 1
+    assert not brokers[0].is_connected()
+    assert await manager.list_sessions() == []
+
+
+@pytest.mark.asyncio
 async def test_shutdown_closes_positions_when_requested(tmp_path: Path) -> None:
     """Graceful shutdown can flatten tracked positions before stopping."""
 

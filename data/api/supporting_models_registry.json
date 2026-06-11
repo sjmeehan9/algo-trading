@@ -35,7 +35,44 @@
       "loaded_at": null,
       "registered_at": "2026-05-08T20:38:28.254285+00:00",
       "state": "registered"
+    },
+    {
+      "config": {
+        "config": {
+          "algorithm": "transformer_sentiment",
+          "created_at": "2026-06-11T04:36:42.080502+00:00",
+          "description": null,
+          "hyperparameters": {
+            "max_length": 512,
+            "model_name": "finbert"
+          },
+          "input_data_types": [
+            "news_text"
+          ],
+          "input_frequency": "1m",
+          "name": "news test",
+          "trainer_type": "huggingface",
+          "training_data_config": {},
+          "updated_at": "2026-06-11T04:36:42.080502+00:00"
+        },
+        "description": null,
+        "input_data_types": [
+          "NEWS_TEXT"
+        ],
+        "input_frequency": "MINUTE_1",
+        "model_id": "supporting-ml-f6b82076",
+        "model_path": null,
+        "model_type": "ml",
+        "signal_type": "sentiment",
+        "trainer_class": "algotrading.src.models.supporting.sentiment.news_sentiment.NewsSentimentTrainer"
+      },
+      "error_message": null,
+      "inference_count": 0,
+      "last_inference_time": null,
+      "loaded_at": null,
+      "registered_at": "2026-06-11T04:36:42.082255+00:00",
+      "state": "registered"
     }
   ],
-  "saved_at": "2026-05-08T20:38:28.255079+00:00"
+  "saved_at": "2026-06-11T04:36:42.082847+00:00"
 }

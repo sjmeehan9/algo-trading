@@ -21,7 +21,12 @@ from algotrading.src.models.registry import (
     trading_strategy,
 )
 from algotrading.src.models.signals import ModelSignal, SignalMetadata, SignalType
-from algotrading.src.models.tracking import GenerationTracker, JsonFileStorage
+from algotrading.src.models.tracking import (
+    EvaluationMetrics,
+    GenerationTracker,
+    JsonFileStorage,
+    TrainingMetrics,
+)
 
 
 @trading_strategy(name="Unit Strategy", signal_type=SignalType.POSITION)
@@ -161,3 +166,56 @@ def test_list_models_rejects_out_of_range_page(service: ModelService) -> None:
 
     with pytest.raises(ModelValidationError):
         service.list_models(page=2, page_size=10)
+
+
+def test_generation_detail_flattens_evaluation_custom_metrics(
+    service: ModelService,
+) -> None:
+    """Nested evaluation custom_metrics must be flattened into scalar metrics."""
+
+    created = service.create_model(_core_payload())
+    generation = service.generation_tracker.start_generation(
+        created.model_id,
+        hyperparameters={"learning_rate": 0.0003},
+    )
+    service.generation_tracker.complete_generation(
+        generation.generation_id,
+        training_metrics=TrainingMetrics(
+            final_reward=-1.05,
+            mean_reward=-1.05,
+            std_reward=0.0,
+            episodes_completed=1,
+            timesteps_trained=10000,
+            training_time_seconds=85.6,
+        ),
+        model_path="/tmp/model.zip",
+    )
+    service.generation_tracker.add_evaluation(
+        generation.generation_id,
+        eval_metrics=EvaluationMetrics(
+            sharpe_ratio=0.0,
+            max_drawdown=0.0,
+            total_return=0.0,
+            win_rate=0.0,
+            profit_factor=0.0,
+            num_trades=0,
+            custom_metrics={
+                "annualized_return": 0.0,
+                "sortino_ratio": 0.0,
+                "volatility": 0.0,
+            },
+        ),
+    )
+
+    detail = service.get_generation_detail(created.model_id, generation.generation_id)
+
+    assert "custom_metrics" not in detail.metrics
+    assert detail.metrics["annualized_return"] == 0.0
+    assert detail.metrics["sortino_ratio"] == 0.0
+    assert detail.metrics["volatility"] == 0.0
+    assert detail.metrics["sharpe_ratio"] == 0.0
+    assert detail.metrics["num_trades"] == 0
+    assert all(
+        value is None or isinstance(value, (int, float, str, bool))
+        for value in detail.metrics.values()
+    )

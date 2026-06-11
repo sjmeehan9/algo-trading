@@ -75,7 +75,45 @@
         ]
       },
       "updated_at": "2026-06-11T01:15:06.965473+00:00"
+    },
+    {
+      "algorithm": "ppo",
+      "created_at": "2026-06-11T03:19:08.321884+00:00",
+      "description": null,
+      "environment_config": {
+        "action_space": "discrete",
+        "allow_short_selling": false,
+        "initial_cash": 100000,
+        "max_position_size": 1,
+        "observation_window": 100,
+        "transaction_cost_bps": 1
+      },
+      "hyperparameters": {
+        "batch_size": 64,
+        "clip_range": 0.2,
+        "gamma": 0.999,
+        "learning_rate": 0.00015,
+        "n_epochs": 10,
+        "n_steps": 1280,
+        "total_timesteps": 10000
+      },
+      "model_id": "core-rl-b581a819",
+      "name": "E2E RL Test 2",
+      "reward_function": "risk_adjusted",
+      "state": "configured",
+      "strategy_ids": [],
+      "supporting_model_ids": [],
+      "trainer_type": "stable_baselines3",
+      "training_data_config": {
+        "data_frequency": "1m",
+        "end_date": "2026-05-31",
+        "start_date": "2026-05-01",
+        "symbols": [
+          "NVDA"
+        ]
+      },
+      "updated_at": "2026-06-11T03:56:16.299865+00:00"
     }
   ],
-  "saved_at": "2026-06-11T01:15:06.965606+00:00"
+  "saved_at": "2026-06-11T03:56:16.341302+00:00"
 }

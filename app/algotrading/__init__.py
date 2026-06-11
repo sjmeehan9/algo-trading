@@ -17,7 +17,11 @@ from .src.models.train_rl import TrainRL
 from .src.reward_functions.profit_seeker import ProfitSeeker
 from .src.reward_functions.reward import reward_factory
 from .src.reward_functions.reward_wrapper import reward_wrapper_function
+from .src.reward_functions.risk_adjusted import RiskAdjusted
+from .src.reward_functions.sharpe_reward import SharpeReward
 from .src.strategies.custom_logic import custom_logic_factory
+from .src.strategies.ema_momentum import EmaMomentum
+from .src.strategies.mean_reversion import MeanReversion
 from .src.strategies.profit_metrics import ProfitMetrics
 from .src.strategies.strategy import Strategy
 from .src.strategies.strategy_wrapper import strategy_wrapper_function

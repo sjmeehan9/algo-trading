@@ -117,6 +117,36 @@ class StableBaselines3Trainer(RLTrainer):
 
         return Path(f"{filepath}_replay_buffer.pkl")
 
+    _DEFAULT_BUFFER_SIZE = 1_000_000
+    _MIN_BUFFER_SIZE = 1_000
+
+    def _clamped_buffer_size(self, requested: object, total_timesteps: int) -> int:
+        """Cap the DQN replay buffer at the run's timestep budget.
+
+        A buffer with more slots than the transitions a run can collect is
+        pure waste: it inflates process memory and produces multi-gigabyte
+        replay-buffer sidecar artifacts (with dict observations, the SB3
+        default of one million slots serializes to several gigabytes).
+        """
+
+        try:
+            requested_size = (
+                int(requested) if requested is not None else self._DEFAULT_BUFFER_SIZE
+            )
+        except (TypeError, ValueError):
+            requested_size = self._DEFAULT_BUFFER_SIZE
+
+        clamp = max(int(total_timesteps), self._MIN_BUFFER_SIZE)
+        size = min(requested_size, clamp)
+        if size != requested_size:
+            self._logger.info(
+                "Clamping DQN buffer_size from %s to %s (total_timesteps=%s)",
+                requested_size,
+                size,
+                total_timesteps,
+            )
+        return size
+
     def _resolve_model_path(self, filepath: str) -> str:
         """Resolve model path with optional `.zip` suffix fallback."""
 
@@ -157,6 +187,11 @@ class StableBaselines3Trainer(RLTrainer):
 
         if config.custom_params:
             model_kwargs.update(config.custom_params)
+
+        if self.algorithm == SB3Algorithm.DQN:
+            model_kwargs["buffer_size"] = self._clamped_buffer_size(
+                model_kwargs.get("buffer_size"), config.total_timesteps
+            )
 
         try:
             self._model = model_class(**model_kwargs)
@@ -298,11 +333,28 @@ class StableBaselines3Trainer(RLTrainer):
         self._model.save(filepath)
 
         if self.algorithm == SB3Algorithm.DQN and hasattr(self._model, "replay_buffer"):
-            replay_buffer = getattr(self._model, "replay_buffer")
             replay_path = self._replay_buffer_path(filepath)
-            replay_path.parent.mkdir(parents=True, exist_ok=True)
-            with replay_path.open("wb") as file_handle:
-                pickle.dump(replay_buffer, file_handle)
+            try:
+                replay_buffer = getattr(self._model, "replay_buffer")
+                replay_path.parent.mkdir(parents=True, exist_ok=True)
+                with replay_path.open("wb") as file_handle:
+                    pickle.dump(replay_buffer, file_handle)
+            except Exception:
+                # The replay buffer is a training-resume aid only; its failure
+                # must never void the already-saved model artifact.
+                self._logger.warning(
+                    "Failed saving DQN replay buffer to %s; the model artifact "
+                    "at %s remains saved and usable",
+                    replay_path,
+                    filepath,
+                    exc_info=True,
+                )
+                try:
+                    replay_path.unlink(missing_ok=True)
+                except OSError:
+                    self._logger.warning(
+                        "Could not remove partial replay buffer %s", replay_path
+                    )
 
     def load(self, filepath: str, env: Env | None = None) -> None:
         """Load model artifact and optional DQN replay buffer."""
@@ -326,10 +378,20 @@ class StableBaselines3Trainer(RLTrainer):
         if self.algorithm == SB3Algorithm.DQN:
             replay_path = self._replay_buffer_path(filepath)
             if replay_path.exists() and self._model is not None:
-                with replay_path.open("rb") as file_handle:
-                    replay_buffer = pickle.load(file_handle)
-                setattr(self._model, "replay_buffer", replay_buffer)
-                self._logger.info("Loaded DQN replay buffer from %s", replay_path)
+                try:
+                    with replay_path.open("rb") as file_handle:
+                        replay_buffer = pickle.load(file_handle)
+                    setattr(self._model, "replay_buffer", replay_buffer)
+                    self._logger.info("Loaded DQN replay buffer from %s", replay_path)
+                except Exception:
+                    # A truncated or corrupt sidecar (e.g. from a disk-full
+                    # write) must not block loading the model itself.
+                    self._logger.warning(
+                        "Failed loading DQN replay buffer from %s; continuing "
+                        "with a fresh buffer",
+                        replay_path,
+                        exc_info=True,
+                    )
 
         self._is_trained = True
 

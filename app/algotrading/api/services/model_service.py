@@ -41,6 +41,7 @@ from algotrading.src.models.registry import (
 )
 from algotrading.src.models.signals import SignalType
 from algotrading.src.models.tracking import (
+    EvaluationMetrics,
     Generation,
     GenerationTracker,
     JsonFileStorage,
@@ -48,6 +49,29 @@ from algotrading.src.models.tracking import (
 from fastapi import Request
 
 logger = logging.getLogger(__name__)
+
+
+def _evaluation_metrics_to_dict(
+    metrics: EvaluationMetrics,
+) -> dict[str, float | int | None]:
+    """Convert generation evaluation metrics to API-compatible primitives."""
+
+    payload = metrics.to_dict()
+    custom_metrics = payload.pop("custom_metrics", None)
+    result: dict[str, float | int | None] = {
+        str(key): value
+        for key, value in payload.items()
+        if isinstance(value, (int, float)) or value is None
+    }
+    if isinstance(custom_metrics, dict):
+        result.update(
+            {
+                str(key): value
+                for key, value in custom_metrics.items()
+                if isinstance(value, (int, float)) or value is None
+            }
+        )
+    return result
 
 _SUPPORTED_TRAINER_ALGORITHMS: dict[str, set[str]] = {
     "stable_baselines3": {"ppo", "dqn", "a2c"},
@@ -1021,8 +1045,7 @@ class ModelService:
                 metrics.update(generation.training_metrics.custom_metrics)
 
         if generation.evaluation_metrics is not None:
-            eval_metrics = generation.evaluation_metrics.to_dict()
-            metrics.update(eval_metrics)
+            metrics.update(_evaluation_metrics_to_dict(generation.evaluation_metrics))
 
         return GenerationSummary(
             generation_id=generation.generation_id,

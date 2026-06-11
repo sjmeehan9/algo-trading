@@ -2,6 +2,8 @@
 
 import logging
 
+from algotrading.src.strategies.ema_momentum import EmaMomentum
+from algotrading.src.strategies.mean_reversion import MeanReversion
 from algotrading.src.strategies.profit_metrics import ProfitMetrics
 
 logger = logging.getLogger(__name__)
@@ -12,6 +14,12 @@ def custom_logic_factory(strategy_name: str, config: dict, pipeline: dict) -> ob
 
     if strategy_name == "profit_metrics":
         return ProfitMetrics(config, pipeline)
+
+    if strategy_name == "ema_momentum":
+        return EmaMomentum(config, pipeline)
+
+    if strategy_name == "mean_reversion":
+        return MeanReversion(config, pipeline)
 
     logger.error("strategy_name not recognised")
     return None
